@@ -8,6 +8,8 @@ const ticketTypeSchema = new mongoose.Schema({
   sold: { type: Number, default: 0 },
   maxPerOrder: { type: Number, default: 10 },
   access: { type: String, enum: ['in-person', 'virtual', 'both'], default: 'both' },
+  // Optional sale window - an "early bird" tier is simply one with a salesEnd date
+  salesStart: Date,
   salesEnd: Date,
 });
 
@@ -81,6 +83,19 @@ const eventSchema = new mongoose.Schema(
       crm: { type: Boolean, default: false },
     },
     ticketTypes: [ticketTypeSchema],
+    // e.g. 10% off when one order has 5 or more tickets. minQty 0 = switched off
+    groupDiscount: {
+      minQty: { type: Number, default: 0, min: 0 },
+      percent: { type: Number, default: 0, min: 0, max: 100 },
+    },
+    // Shown to buyers before they pay
+    refundPolicy: { type: String, maxlength: 600, default: 'Refunds are at the organizer\'s discretion. If the event is cancelled you are refunded in full.' },
+    // Buyers may ask for a refund from "My Tickets" until the event starts
+    allowCancelRequests: { type: Boolean, default: true },
+    // Filled in when the organizer cancels the event and everyone is refunded
+    cancellation: { startedAt: Date, finishedAt: Date, refunded: Number, failed: Number },
+    // Ticket holders may pass a ticket to someone else until the event starts
+    allowTransfers: { type: Boolean, default: true },
     registrationFields: [registrationFieldSchema],
     sessions: [sessionSchema],
     budget: {
@@ -92,6 +107,32 @@ const eventSchema = new mongoose.Schema(
       webhookUrl: String,
       lastSyncAt: Date,
       lastSyncStatus: String,
+    },
+    // Gate staff: people who may scan tickets for this event but see nothing else about it
+    staff: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        role: { type: String, enum: ['checkin'], default: 'checkin' },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
+    // Set by a platform admin when an event is taken down; while blocked the organizer cannot publish it
+    moderation: {
+      blocked: Boolean,
+      reason: String,
+      at: Date,
+      by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      previousStatus: String,
+    },
+    // Signs ticket QR codes so gates can verify them offline. The private key never leaves the server.
+    gateKey: {
+      publicJwk: mongoose.Schema.Types.Mixed,
+      privateKey: { type: String, select: false },
+    },
+    // Set by the reminder scheduler so each reminder goes out exactly once
+    reminders: {
+      sent24h: Date,
+      sent1h: Date,
     },
     views: { type: Number, default: 0 },
     featured: { type: Boolean, default: false },

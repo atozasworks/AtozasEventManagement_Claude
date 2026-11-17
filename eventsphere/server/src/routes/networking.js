@@ -5,11 +5,12 @@ import Connection from '../models/Connection.js';
 import ChatMessage from '../models/ChatMessage.js';
 import { protect } from '../middleware/auth.js';
 import { ah, HttpError } from '../utils/http.js';
+import { ACTIVE_TICKET } from '../utils/orders.js';
 
 const router = Router();
 
 async function assertTicketHolder(eventId, userId) {
-  if (!(await Ticket.exists({ event: eventId, user: userId }))) {
+  if (!(await Ticket.exists({ event: eventId, user: userId, ...ACTIVE_TICKET }))) {
     throw new HttpError(403, 'Only registered attendees can access networking');
   }
 }
@@ -20,7 +21,7 @@ router.get(
   protect,
   ah(async (req, res) => {
     await assertTicketHolder(req.params.eventId, req.user._id);
-    const userIds = await Ticket.distinct('user', { event: req.params.eventId });
+    const userIds = await Ticket.distinct('user', { event: req.params.eventId, ...ACTIVE_TICKET });
     const people = await User.find({ _id: { $in: userIds, $ne: req.user._id }, openToNetworking: true })
       .select('name headline organizationName interests')
       .limit(200);

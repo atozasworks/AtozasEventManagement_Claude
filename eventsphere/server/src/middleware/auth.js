@@ -8,13 +8,19 @@ export function signToken(user) {
   });
 }
 
+// A password reset signs out every device that was logged in before it
+export function issuedBeforePasswordChange(payload, user) {
+  return Boolean(user.passwordChangedAt) && payload.iat * 1000 < user.passwordChangedAt.getTime() - 1000;
+}
+
 async function resolveUser(req) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    return await User.findById(payload.id);
+    const user = await User.findById(payload.id);
+    return user && !issuedBeforePasswordChange(payload, user) ? user : null;
   } catch {
     return null;
   }
@@ -24,13 +30,15 @@ async function resolveUser(req) {
 export async function protect(req, _res, next) {
   const user = await resolveUser(req);
   if (!user) return next(new HttpError(401, 'Please log in to continue'));
+  if (user.suspended) return next(new HttpError(403, 'This account has been suspended. Please contact support.'));
   req.user = user;
   next();
 }
 
 // Attaches req.user if a token is present, but never blocks
 export async function optionalAuth(req, _res, next) {
-  req.user = await resolveUser(req);
+  const user = await resolveUser(req);
+  req.user = user && !user.suspended ? user : null; // a suspended account browses as a visitor
   next();
 }
 

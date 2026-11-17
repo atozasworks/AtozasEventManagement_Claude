@@ -27,6 +27,7 @@ const blank = {
   location: { venueName: '', address: '', city: '', state: '', country: 'India' },
   modules: PRESETS.conference.modules,
   ticketTypes: [{ name: 'General Admission', price: 0, quantity: 100, maxPerOrder: 10, access: 'both', description: '' }],
+  groupDiscount: { minQty: 0, percent: 0 },
   registrationFields: [],
   sessions: [],
   integrations: { crmProvider: 'none', webhookUrl: '' },
@@ -61,7 +62,7 @@ export default function EventEditor() {
     if (id) {
       api.get(`/events/${id}`).then((r) => {
         const d = r.data;
-        setEv({ ...blank, ...d, location: { ...blank.location, ...d.location, venue: d.location?.venue }, integrations: { ...blank.integrations, ...d.integrations } });
+        setEv({ ...blank, ...d, location: { ...blank.location, ...d.location, venue: d.location?.venue }, integrations: { ...blank.integrations, ...d.integrations }, groupDiscount: { ...blank.groupDiscount, ...d.groupDiscount } });
         setLoaded(true);
       }).catch((e) => setError(errMsg(e)));
     }
@@ -89,7 +90,15 @@ export default function EventEditor() {
     setBusy(true);
     setError('');
     try {
-      const payload = { ...ev, startDate: new Date(ev.startDate), endDate: new Date(ev.endDate) };
+      // Date inputs hold the organizer's local time; send exact moments so the server's own timezone never shifts them
+      const moment = (v) => (v ? new Date(v) : null);
+      const payload = {
+        ...ev,
+        startDate: new Date(ev.startDate),
+        endDate: new Date(ev.endDate),
+        ticketTypes: ev.ticketTypes.map((t) => ({ ...t, salesStart: moment(t.salesStart), salesEnd: moment(t.salesEnd) })),
+        sessions: ev.sessions.map((s) => ({ ...s, startTime: moment(s.startTime), endTime: moment(s.endTime) })),
+      };
       if (!payload.location.venue) delete payload.location.venue;
       const { data } = id ? await api.put(`/events/${id}`, payload) : await api.post('/events', payload);
       if (publish) await api.post(`/events/${data._id}/status`, { status: 'published' });
@@ -196,10 +205,40 @@ export default function EventEditor() {
                 </select>
               </label>
               <label>Description<input value={t.description || ''} onChange={(e) => up({ description: e.target.value })} /></label>
+              <label className="span-2">Sale starts (optional)<input type="datetime-local" value={toLocalInput(t.salesStart)} onChange={(e) => up({ salesStart: e.target.value || null })} /></label>
+              <label className="span-2">Sale ends (optional)<input type="datetime-local" value={toLocalInput(t.salesEnd)} onChange={(e) => up({ salesEnd: e.target.value || null })} /></label>
               {t.sold > 0 && <span className="muted tiny">{t.sold} sold</span>}
             </div>
           )}
         />
+        <p className="muted tiny">Early-bird pricing: add a cheaper ticket type and give it a "Sale ends" date. It closes by itself on that date or when it sells out.</p>
+
+        <label className="check">
+          <input type="checkbox" checked={ev.allowTransfers !== false} onChange={(e) => set('allowTransfers', e.target.checked)} />
+          Let ticket holders transfer a ticket to someone else (until the event starts)
+        </label>
+
+        <label className="check">
+          <input type="checkbox" checked={ev.allowCancelRequests !== false} onChange={(e) => set('allowCancelRequests', e.target.checked)} />
+          Let buyers request a refund from "My Tickets" (you approve or decline each request)
+        </label>
+        <label>Refund policy shown to buyers before they pay
+          <textarea rows={2} maxLength={600} placeholder="Refunds are at the organizer's discretion. If the event is cancelled you are refunded in full." value={ev.refundPolicy ?? ''} onChange={(e) => set('refundPolicy', e.target.value)} />
+        </label>
+
+        <h4>Group discount</h4>
+        <div className="grid-3">
+          <label>Tickets in one order (0 = off)
+            <input type="number" min={0} value={ev.groupDiscount.minQty} onChange={(e) => set('groupDiscount', { ...ev.groupDiscount, minQty: Number(e.target.value) })} />
+          </label>
+          <label>Percent off
+            <input type="number" min={0} max={100} value={ev.groupDiscount.percent} onChange={(e) => set('groupDiscount', { ...ev.groupDiscount, percent: Number(e.target.value) })} />
+          </label>
+        </div>
+        <p className="muted tiny">
+          Example: 5 and 10 gives 10% off any order with 5 or more tickets. A buyer gets either this or a promo code, whichever saves more.
+          Promo codes are managed in the "Promo codes" tab of the event dashboard.
+        </p>
       </section>
 
       <section className="card">

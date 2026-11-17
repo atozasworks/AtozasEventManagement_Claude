@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
   const isOrganizer = user && ['organizer', 'admin'].includes(user.role);
 
   return (
-    <AuthContext.Provider value={{ user, ready, login, register, logout, becomeOrganizer, isOrganizer }}>
+    <AuthContext.Provider value={{ user, ready, login, register, logout, becomeOrganizer, isOrganizer, saveSession, setUser }}>
       {children}
     </AuthContext.Provider>
   );

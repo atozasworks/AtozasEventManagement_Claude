@@ -23,6 +23,12 @@ import ticketRoutes from './routes/tickets.js';
 import venueRoutes from './routes/venues.js';
 import expoRoutes from './routes/expo.js';
 import networkingRoutes from './routes/networking.js';
+import couponRoutes from './routes/coupons.js';
+import adminRoutes from './routes/admin.js';
+import notificationRoutes from './routes/notifications.js';
+import vendorRoutes from './routes/vendors.js';
+import { emailConfigured } from './services/email.js';
+import { startReminderScheduler } from './services/reminders.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.resolve(__dirname, '../.env');
@@ -51,7 +57,10 @@ app.use(express.json({ limit: '2mb' }));
 
 // Slow down password guessing
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 50, standardHeaders: 'draft-7', legacyHeaders: false, message: { message: 'Too many attempts. Please wait a few minutes and try again.' } });
-app.use(['/api/auth/login', '/api/auth/register'], authLimiter);
+app.use(['/api/auth/login', '/api/auth/register', '/api/auth/reset-password', '/api/auth/verify-email'], authLimiter);
+// Stop the "send me a link" forms being used to flood someone's inbox
+const linkLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: 'draft-7', legacyHeaders: false, message: { message: 'Too many emails requested. Please wait a few minutes and try again.' } });
+app.use(['/api/auth/forgot-password', '/api/auth/resend-verification'], linkLimiter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'eventsphere-api', payments: getGateway().provider, time: new Date() }));
 app.use('/api/auth', authRoutes);
@@ -61,6 +70,10 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/venues', venueRoutes);
 app.use('/api/expo', expoRoutes);
 app.use('/api/networking', networkingRoutes);
+app.use('/api/coupons', couponRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/vendors', vendorRoutes);
 
 // In production, serve the built React app from the live dist folder
 // const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -83,6 +96,8 @@ connectDB(MONGO_URI)
       // console.log(`EventSphere API running on http://localhost:${PORT}`);
       console.log(`EventSphere API running on https://emscloude.testatozas.in (port ${PORT})`);
       getGateway(); // logs which payment mode is active
+      console.log(`Email: ${emailConfigured() ? `SMTP via ${process.env.SMTP_HOST}` : 'not configured - messages are saved to server/.outbox'}`);
+      startReminderScheduler();
     })
   )
   .catch((err) => {

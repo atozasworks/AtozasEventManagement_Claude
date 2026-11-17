@@ -17,6 +17,17 @@ const userSchema = new mongoose.Schema(
     openToNetworking: { type: Boolean, default: true },
     // Consent captured for GDPR/DPDP readiness
     marketingConsent: { type: Boolean, default: false },
+    // Email ownership + password recovery. Only SHA-256 hashes of the emailed tokens are stored.
+    emailVerified: { type: Boolean, default: false },
+    emailVerifyTokenHash: { type: String, select: false },
+    emailVerifyExpires: { type: Date, select: false },
+    passwordResetTokenHash: { type: String, select: false },
+    passwordResetExpires: { type: Date, select: false },
+    // Set by a platform admin: a suspended account cannot log in or do anything
+    suspended: { type: Boolean, default: false },
+    suspendedReason: String,
+    // Logins issued before this moment stop working (set when the password is reset)
+    passwordChangedAt: Date,
   },
   { timestamps: true }
 );
@@ -32,8 +43,8 @@ userSchema.methods.matchPassword = function matchPassword(plain) {
 };
 
 userSchema.methods.toSafeJSON = function toSafeJSON() {
-  const { _id, name, email, phone, role, organizationName, plan, headline, interests, openToNetworking } = this;
-  return { _id, name, email, phone, role, organizationName, plan, headline, interests, openToNetworking };
+  const { _id, name, email, phone, role, organizationName, plan, headline, interests, openToNetworking, emailVerified } = this;
+  return { _id, name, email, phone, role, organizationName, plan, headline, interests, openToNetworking, emailVerified: Boolean(emailVerified) };
 };
 
 export default mongoose.model('User', userSchema);

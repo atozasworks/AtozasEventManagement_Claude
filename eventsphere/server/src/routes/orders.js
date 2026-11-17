@@ -1,23 +1,32 @@
 import { Router } from 'express';
-import crypto from 'crypto';
 import Event from '../models/Event.js';
 import Order from '../models/Order.js';
 import Ticket from '../models/Ticket.js';
 import { protect } from '../middleware/auth.js';
-import { ah, HttpError } from '../utils/http.js';
-import { calculateFees, getGateway } from '../services/payments.js';
-import { sendTicketConfirmation } from '../services/notifications.js';
+import { ah, HttpError, isObjectId } from '../utils/http.js';
+import { loadOwnedEvent } from './events.js';
+import { refundTickets } from '../services/refunds.js';
+import { logAdmin } from '../services/audit.js';
+import { notify } from '../services/notify.js';
+import Coupon from '../models/Coupon.js';
+import { getGateway } from '../services/payments.js';
+import { priceOrder } from '../services/pricing.js';
+import { sendTicketConfirmation, sendTicketShared } from '../services/notifications.js';
+import { ticketCode, newClaimToken, cleanEmail, cleanName, isEmail } from '../utils/tickets.js';
 import { pushRegistrationToCRM } from '../services/crm.js';
 
 const router = Router();
 
-function ticketCode() {
-  // Short, human-readable, unambiguous characters (no 0/O, 1/I)
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.randomBytes(10);
-  let out = 'ES-';
-  for (let i = 0; i < 10; i++) out += alphabet[bytes[i] % alphabet.length];
-  return out;
+// Names/emails typed in the checkout for each ticket of one line. Blank entries are allowed.
+function cleanAttendees(list, qty, ticketName) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, qty).map((a) => {
+    const name = cleanName(a?.name);
+    const email = cleanEmail(a?.email);
+    if (email && !isEmail(email)) throw new HttpError(400, `"${email}" is not a valid email address (${ticketName})`);
+    if (email && !name) throw new HttpError(400, `Add a name for ${email} (${ticketName})`);
+    return { name, email };
+  });
 }
 
 /**
@@ -51,6 +60,27 @@ async function reserveInventory(eventId, items) {
 }
 
 /**
+ * Count this order against its promo code's usage limit (once per order).
+ * strict: only succeed while the code still has uses left.
+ */
+async function claimCoupon(order, { strict = false } = {}) {
+  if (!order.discount?.coupon || order.discount.claimed) return true;
+  const filter = { _id: order.discount.coupon };
+  if (strict) filter.$or = [{ maxUses: 0 }, { $expr: { $lt: ['$used', '$maxUses'] } }];
+  const r = await Coupon.updateOne(filter, { $inc: { used: 1 } });
+  if (!r.modifiedCount) return !strict;
+  order.discount.claimed = true;
+  await Order.updateOne({ _id: order._id }, { 'discount.claimed': true });
+  return true;
+}
+
+async function releaseCoupon(order) {
+  if (!order.discount?.coupon || !order.discount.claimed) return;
+  await Coupon.updateOne({ _id: order.discount.coupon, used: { $gt: 0 } }, { $inc: { used: -1 } });
+  order.discount.claimed = false;
+}
+
+/**
  * Issue tickets for a verified payment. Idempotent: the browser callback and the
  * Razorpay webhook may both call this for the same order - only one wins the claim.
  */
@@ -70,6 +100,8 @@ export async function finalizePaidOrder(orderId, { paymentId, reference, method 
   }
 
   const event = await Event.findById(order.event);
+  // The buyer has already paid the discounted price, so the code is honoured even if it filled up meanwhile
+  await claimCoupon(order);
   try {
     await reserveInventory(event._id, order.items);
   } catch (err) {
@@ -82,6 +114,7 @@ export async function finalizePaidOrder(orderId, { paymentId, reference, method 
         console.error(`REFUND NEEDED for order ${order._id}:`, e.message);
       }
     }
+    await releaseCoupon(order);
     order.paymentStatus = 'refunded';
     order.gateway.refundId = refundId;
     order.gateway.failureReason = err.message;
@@ -89,24 +122,38 @@ export async function finalizePaidOrder(orderId, { paymentId, reference, method 
     throw new HttpError(409, `${err.message} Your payment has been refunded${refundId ? '' : ' (our team will process it shortly)'}.`);
   }
 
+  // One ticket per seat. A ticket named for someone else stays in the buyer's account until
+  // that person adds it to their own account from the link we email them.
+  const buyerEmail = cleanEmail(order.buyer.email);
+  const shareTokens = new Map(); // other person's email -> claim token (one link per person per order)
   const docs = [];
   for (const item of order.items) {
     const tt = event.ticketTypes.id(item.ticketTypeId);
     for (let i = 0; i < item.qty; i++) {
+      const named = item.attendees?.[i] || {};
+      const holderEmail = cleanEmail(named.email) || buyerEmail;
+      let claimTokenHash;
+      if (holderEmail !== buyerEmail) {
+        if (!shareTokens.has(holderEmail)) shareTokens.set(holderEmail, newClaimToken());
+        claimTokenHash = shareTokens.get(holderEmail).hash;
+      }
       docs.push({
         order: order._id,
         event: event._id,
         user: order.user,
+        purchaser: order.user,
         ticketTypeId: item.ticketTypeId,
         ticketTypeName: item.name,
         access: tt?.access || 'both',
-        holderName: order.buyer.name,
-        holderEmail: order.buyer.email,
+        holderName: named.name || order.buyer.name,
+        holderEmail,
+        claimTokenHash,
         code: ticketCode(),
       });
     }
   }
-  const tickets = await Ticket.insertMany(docs);
+  await Ticket.insertMany(docs);
+  const tickets = await Ticket.find({ order: order._id }); // fresh read leaves the claim hashes out
 
   order.paymentStatus = 'paid';
   order.paymentRef = reference || paymentId;
@@ -114,32 +161,63 @@ export async function finalizePaidOrder(orderId, { paymentId, reference, method 
   await order.save();
 
   sendTicketConfirmation({ order, event, tickets }).catch(() => {});
+  for (const [email, token] of shareTokens) {
+    const theirs = tickets.filter((t) => t.holderEmail === email);
+    sendTicketShared({ event, tickets: theirs, toName: theirs[0].holderName, toEmail: email, fromName: order.buyer.name, token: token.raw, reason: 'booked' }).catch(() => {});
+  }
   pushRegistrationToCRM(event, order).catch(() => {});
+  // Bell notification for the organizer of this event (not when they book their own event)
+  if (String(event.organizer) !== String(order.user)) {
+    const count = tickets.length;
+    notify(event.organizer, {
+      type: 'booking',
+      event: event._id,
+      title: `New booking: ${count} ticket${count === 1 ? '' : 's'} for ${event.title}`,
+      body: `${order.buyer?.name || 'Someone'} booked ${order.items.map((i) => `${i.qty} x ${i.name}`).join(', ')} - ${order.total > 0 ? `${order.currency} ${order.total.toFixed(2)} paid` : 'free registration'}`,
+      link: `/organize/${event._id}?tab=orders`,
+    });
+  }
   return { order, tickets };
 }
+
+async function loadOpenEvent(eventId) {
+  const event = await Event.findById(eventId);
+  if (!event || event.status !== 'published') throw new HttpError(404, 'This event is not open for registration');
+  if (event.endDate < new Date()) throw new HttpError(400, 'This event has already ended');
+  return event;
+}
+
+// Live price for the checkout: totals, group discount and (optionally) a promo code
+router.post(
+  '/quote',
+  protect,
+  ah(async (req, res) => {
+    const { eventId, items = [], promoCode } = req.body;
+    const event = await loadOpenEvent(eventId);
+    const { lines, listTotal, discount, promoNote, subtotal, platformFee, total, currency } = await priceOrder(event, items, promoCode);
+    res.json({
+      lines,
+      listTotal,
+      discount: discount ? { kind: discount.kind, code: discount.code, amount: discount.amount, label: discount.label } : null,
+      promoNote,
+      subtotal,
+      platformFee,
+      total,
+      currency,
+    });
+  })
+);
 
 // Step 1: create an order - validates selection and prices server-side
 router.post(
   '/',
   protect,
   ah(async (req, res) => {
-    const { eventId, items = [], buyer = {}, answers = {}, attribution = {} } = req.body;
-    const event = await Event.findById(eventId);
-    if (!event || event.status !== 'published') throw new HttpError(404, 'This event is not open for registration');
-    if (event.endDate < new Date()) throw new HttpError(400, 'This event has already ended');
+    const { eventId, items = [], buyer = {}, answers = {}, attribution = {}, promoCode } = req.body;
+    const event = await loadOpenEvent(eventId);
 
-    const lines = [];
-    for (const { ticketTypeId, qty } of items) {
-      const n = Number(qty);
-      if (!n || n < 1) continue;
-      const tt = event.ticketTypes.id(ticketTypeId);
-      if (!tt) throw new HttpError(400, 'Unknown ticket type');
-      if (n > tt.maxPerOrder) throw new HttpError(400, `You can buy up to ${tt.maxPerOrder} "${tt.name}" tickets per order`);
-      if (tt.salesEnd && tt.salesEnd < new Date()) throw new HttpError(400, `Sales for "${tt.name}" have ended`);
-      if (tt.sold + n > tt.quantity) throw new HttpError(409, `Only ${tt.quantity - tt.sold} "${tt.name}" left`);
-      lines.push({ ticketTypeId: tt._id, name: tt.name, price: tt.price, qty: n });
-    }
-    if (!lines.length) throw new HttpError(400, 'Select at least one ticket');
+    // Prices, sale windows, stock and discounts are all decided on the server
+    const { lines, listTotal, discount, subtotal, platformFee, total } = await priceOrder(event, items, promoCode);
 
     for (const f of event.registrationFields) {
       if (f.required && (answers[f.label] === undefined || answers[f.label] === '')) {
@@ -147,8 +225,12 @@ router.post(
       }
     }
 
-    const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-    const { platformFee, total } = calculateFees(subtotal);
+    // Who each ticket is for (optional)
+    for (const line of lines) {
+      const sent = items.find((i) => String(i.ticketTypeId) === String(line.ticketTypeId));
+      line.attendees = cleanAttendees(sent?.attendees, line.qty, line.name);
+    }
+
     const gateway = getGateway();
 
     const order = await Order.create({
@@ -160,6 +242,8 @@ router.post(
         phone: buyer.phone || req.user.phone,
       },
       items: lines,
+      listTotal,
+      discount: discount || undefined,
       subtotal,
       platformFee,
       total,
@@ -171,6 +255,13 @@ router.post(
     });
 
     if (total === 0) {
+      // Nothing to pay, so a limited code (e.g. 10 free passes) must be claimed strictly before tickets go out
+      if (order.discount?.coupon && !(await claimCoupon(order, { strict: true }))) {
+        order.paymentStatus = 'failed';
+        order.gateway.failureReason = 'Promo code fully used';
+        await order.save();
+        throw new HttpError(409, 'This promo code has just been fully used. Remove it to continue.');
+      }
       const result = await finalizePaidOrder(order._id, { reference: `FREE-${Date.now().toString(36).toUpperCase()}`, method: 'free' });
       return res.status(201).json(result);
     }
@@ -224,6 +315,30 @@ router.post(
       { paymentStatus: 'failed', 'gateway.failureReason': String(req.body.reason || 'Cancelled by buyer').slice(0, 300) }
     );
     res.json({ ok: true });
+  })
+);
+
+// Organizer (or admin) cancels tickets of an order and refunds them. Leave ticketIds out for the whole order.
+router.post(
+  '/:id/refund',
+  protect,
+  ah(async (req, res) => {
+    const order = isObjectId(req.params.id) && (await Order.findById(req.params.id).select('event'));
+    if (!order) throw new HttpError(404, 'Order not found');
+    const event = await loadOwnedEvent(req, order.event);
+    const { ticketIds, reason, fromRequest } = req.body;
+    if (ticketIds && (!Array.isArray(ticketIds) || !ticketIds.length)) throw new HttpError(400, 'Choose at least one ticket to refund');
+    const result = await refundTickets({
+      orderId: order._id,
+      ticketIds,
+      reason: reason || (fromRequest ? 'Refund requested by the buyer' : 'Refunded by the organizer'),
+      by: req.user._id,
+      kind: fromRequest ? 'attendee-request' : 'organizer',
+    });
+    if (String(event.organizer) !== String(req.user._id)) {
+      await logAdmin(req, 'order.refund', 'order', order._id, `Refunded ${result.order.currency} ${result.amount.toFixed(2)} (${result.cancelled} ticket${result.cancelled === 1 ? '' : 's'}) on order #${String(order._id).slice(-8).toUpperCase()} for "${event.title}"`);
+    }
+    res.json({ ok: true, amount: result.amount, cancelled: result.cancelled, paymentStatus: result.order.paymentStatus, currency: result.order.currency });
   })
 );
 

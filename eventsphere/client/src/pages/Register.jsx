@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { errMsg } from '../api.js';
 import { photo } from '../utils/format.js';
@@ -7,6 +7,7 @@ import { photo } from '../utils/format.js';
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', role: 'attendee', organizationName: '', marketingConsent: false });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -18,7 +19,7 @@ export default function Register() {
     setError('');
     try {
       const u = await register(form);
-      navigate(u.role === 'organizer' ? '/organize' : '/');
+      navigate(location.state?.from || (u.role === 'organizer' ? '/organize' : '/')); // back to where they were heading, e.g. a ticket link
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -49,7 +50,7 @@ export default function Register() {
           {error && <div className="alert error">{error}</div>}
           <button className="btn block" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
         </form>
-        <p className="small">Already have an account? <Link to="/login">Log in</Link></p>
+        <p className="small">Already have an account? <Link to="/login" state={location.state}>Log in</Link></p>
       </div>
     </div>
   );

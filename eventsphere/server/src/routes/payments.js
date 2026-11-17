@@ -45,10 +45,15 @@ router.post(
       } else if (evt.event === 'refund.processed') {
         const refund = evt.payload?.refund?.entity;
         if (refund?.payment_id) {
-          await Order.updateOne(
-            { 'gateway.paymentId': refund.payment_id },
-            { paymentStatus: 'refunded', 'gateway.refundId': refund.id }
-          );
+          // Refunds started from EventSphere are already recorded on the order. Only a refund made directly
+          // in the Razorpay dashboard needs recording here.
+          const ours = await Order.exists({ 'gateway.paymentId': refund.payment_id, $or: [{ 'refunds.refundId': refund.id }, { 'gateway.refundId': refund.id }] });
+          if (!ours) {
+            await Order.updateOne(
+              { 'gateway.paymentId': refund.payment_id },
+              { paymentStatus: 'refunded', 'gateway.refundId': refund.id }
+            );
+          }
         }
       }
     } catch (err) {

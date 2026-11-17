@@ -4,6 +4,7 @@ import Ticket from '../models/Ticket.js';
 import { protect } from '../middleware/auth.js';
 import { ah, HttpError } from '../utils/http.js';
 import { loadOwnedEvent } from './events.js';
+import { ACTIVE_TICKET } from '../utils/orders.js';
 
 const router = Router();
 const TIER_ORDER = { platinum: 0, gold: 1, silver: 2, startup: 3 };
@@ -68,7 +69,7 @@ router.post(
   ah(async (req, res) => {
     const booth = await Booth.findById(req.params.id);
     if (!booth) throw new HttpError(404, 'Booth not found');
-    const hasTicket = await Ticket.exists({ event: booth.event, user: req.user._id });
+    const hasTicket = await Ticket.exists({ event: booth.event, user: req.user._id, ...ACTIVE_TICKET });
     if (!hasTicket) throw new HttpError(403, 'Register for the event to connect with sponsors');
     if (booth.leads.some((l) => String(l.user) === String(req.user._id))) {
       return res.json({ ok: true, alreadyShared: true });

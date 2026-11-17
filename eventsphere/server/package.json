@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "make-admin": "node src/makeAdmin.js",
+    "seed-vendors": "node src/seedVendors.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -20,6 +22,9 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.0",
     "morgan": "^1.10.0",
+    "nodemailer": "^10.6.0",
+    "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",
     "socket.io": "^4.8.1"
   },

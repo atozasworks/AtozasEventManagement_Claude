@@ -28,13 +28,20 @@ export default function OrganizerDashboard() {
   const { user, isOrganizer } = useAuth();
   const [events, setEvents] = useState(null);
   const [inquiries, setInquiries] = useState([]);
+  const [received, setReceived] = useState([]); // quote requests other organizers sent for venues I look after
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isOrganizer) return;
     api.get('/events/mine').then((r) => setEvents(r.data)).catch((e) => setError(errMsg(e)));
     api.get('/venues/inquiries/mine').then((r) => setInquiries(r.data)).catch(() => {});
+    api.get('/venues/inquiries/received').then((r) => setReceived(r.data)).catch(() => {});
   }, [isOrganizer]);
+
+  // The bell links here with #quotes: bring that section into view once it has loaded
+  useEffect(() => {
+    if (window.location.hash === '#quotes' && received.length) document.getElementById('quotes')?.scrollIntoView({ behavior: 'smooth' });
+  }, [received.length]);
 
   if (!isOrganizer) return <BecomeOrganizer />;
   if (error) return <div className="page"><div className="alert error">{error}</div></div>;
@@ -81,6 +88,30 @@ export default function OrganizerDashboard() {
         </tbody>
       </table>
       {!events.length && <div className="empty">No events yet — create your first one.</div>}
+
+      {received.length > 0 && (
+        <>
+          <h2 id="quotes">Quote requests received</h2>
+          <p className="muted small">Organizers asking about venues you look after. Reply to them by email to send your quote.</p>
+          <table className="table">
+            <thead><tr><th>Venue</th><th>From</th><th>Dates</th><th>Guests</th><th>Message</th></tr></thead>
+            <tbody>
+              {received.map((q) => (
+                <tr key={q._id}>
+                  <td>{q.venue?.name}<div className="muted tiny">{q.venue?.city}</div></td>
+                  <td>
+                    <b>{q.organizer?.organizationName || q.organizer?.name}</b>
+                    <div className="muted tiny"><a href={`mailto:${q.organizer?.email}`}>{q.organizer?.email}</a>{q.organizer?.phone && ` · ${q.organizer.phone}`}</div>
+                  </td>
+                  <td>{dateShort(q.startDate)} – {dateShort(q.endDate)}</td>
+                  <td>{num(q.expectedAttendees)}</td>
+                  <td className="small">{q.message || '—'}{q.event?.title && <div className="muted tiny">For: {q.event.title}</div>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {inquiries.length > 0 && (
         <>

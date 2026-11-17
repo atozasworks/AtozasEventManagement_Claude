@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Emails saved locally when SMTP is not configured
+.outbox/

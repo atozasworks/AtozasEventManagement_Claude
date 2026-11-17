@@ -3,6 +3,8 @@ import User from './models/User.js';
 import Ticket from './models/Ticket.js';
 import Event from './models/Event.js';
 import ChatMessage from './models/ChatMessage.js';
+import { issuedBeforePasswordChange } from './middleware/auth.js';
+import { ACTIVE_TICKET } from './utils/orders.js';
 
 /**
  * Real-time layer for virtual/hybrid sessions: live chat, Q&A,
@@ -13,8 +15,8 @@ export function initSocket(io) {
     try {
       const { token } = socket.handshake.auth || {};
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      socket.user = await User.findById(payload.id).select('name role');
-      if (!socket.user) return next(new Error('unauthorized'));
+      socket.user = await User.findById(payload.id).select('name role passwordChangedAt suspended');
+      if (!socket.user || socket.user.suspended || issuedBeforePasswordChange(payload, socket.user)) return next(new Error('unauthorized'));
       next();
     } catch {
       next(new Error('unauthorized'));
@@ -32,7 +34,7 @@ export function initSocket(io) {
           event &&
           (String(event.organizer) === String(socket.user._id) ||
             socket.user.role === 'admin' ||
-            (await Ticket.exists({ event: eventId, user: socket.user._id })));
+            (await Ticket.exists({ event: eventId, user: socket.user._id, ...ACTIVE_TICKET })));
         if (!allowed) return ack?.({ ok: false, message: 'Register to join this event' });
 
         for (const r of socket.rooms) if (r.startsWith('event:')) { socket.leave(r); broadcastCount(r); }

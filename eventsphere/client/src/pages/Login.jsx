@@ -24,7 +24,7 @@ export default function Login() {
     setError('');
     try {
       const u = await login(creds.email, creds.password);
-      navigate(location.state?.from || (u.role === 'attendee' ? '/' : '/organize'), { replace: true });
+      navigate(location.state?.from || (u.role === 'admin' ? '/admin' : u.role === 'attendee' ? '/' : '/organize'), { replace: true });
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -45,7 +45,8 @@ export default function Login() {
           {error && <div className="alert error">{error}</div>}
           <button className="btn block" disabled={busy}>{busy ? 'Signing in…' : 'Log in'}</button>
         </form>
-        <p className="small">New here? <Link to="/register">Create an account</Link></p>
+        <p className="small"><Link to="/forgot-password">Forgot your password?</Link></p>
+        <p className="small">New here? <Link to="/register" state={location.state}>Create an account</Link></p>
         <div className="demo-box">
           <p className="small muted">Demo accounts (after <code>npm run seed</code>):</p>
           {DEMO.map(([email, label]) => (

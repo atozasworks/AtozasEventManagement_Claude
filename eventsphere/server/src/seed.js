@@ -14,6 +14,12 @@ import VenueInquiry from './models/VenueInquiry.js';
 import Order from './models/Order.js';
 import Ticket from './models/Ticket.js';
 import Booth from './models/Booth.js';
+import Coupon from './models/Coupon.js';
+import Vendor from './models/Vendor.js';
+import VendorRequest from './models/VendorRequest.js';
+import VendorDay from './models/VendorDay.js';
+import Notification from './models/Notification.js';
+import { demoVendors } from './vendorDemoData.js';
 import Connection from './models/Connection.js';
 import ChatMessage from './models/ChatMessage.js';
 
@@ -30,23 +36,23 @@ async function run() {
   await connectDB(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/eventsphere');
   //await connectDB(process.env.MONGO_URI || 'mongodb://emscloudeuser:A1b2c3d4e5@62.72.31.206:57423/emscloude?authSource=emscloude');
   await Promise.all(
-    [User, Event, Venue, VenueInquiry, Order, Ticket, Booth, Connection, ChatMessage].map((m) => m.deleteMany({}))
+    [User, Event, Venue, VenueInquiry, Order, Ticket, Booth, Coupon, Connection, ChatMessage, Vendor, VendorRequest, VendorDay, Notification].map((m) => m.deleteMany({}))
   );
 
   // ---------- Users ----------
   const password = 'password123';
-  const admin = await User.create({ name: 'Platform Admin', email: 'admin@eventsphere.in', password, role: 'admin' });
+  const admin = await User.create({ name: 'Platform Admin', email: 'admin@eventsphere.in', password, role: 'admin', emailVerified: true });
   const organizer = await User.create({
     name: 'Ananya Rao', email: 'organizer@eventsphere.in', password, role: 'organizer',
-    organizationName: 'Pilot Events Pvt Ltd', plan: 'enterprise', phone: '+919800000001',
+    organizationName: 'Pilot Events Pvt Ltd', plan: 'enterprise', phone: '+919800000001', emailVerified: true,
   });
   const creator = await User.create({
     name: 'Kabir Shah', email: 'creator@eventsphere.in', password, role: 'organizer',
-    organizationName: 'Indie Workshops', plan: 'free',
+    organizationName: 'Indie Workshops', plan: 'free', emailVerified: true,
   });
   const attendee = await User.create({
     name: 'Rohan Mehta', email: 'attendee@eventsphere.in', password, role: 'attendee',
-    headline: 'Product Manager, fintech', interests: ['AI', 'Payments'], phone: '+919800000002',
+    headline: 'Product Manager, fintech', interests: ['AI', 'Payments'], phone: '+919800000002', emailVerified: true,
   });
   const others = await User.create(
     ['Priya Nair', 'Arjun Singh', 'Meera Iyer', 'Vikram Das', 'Sara Khan', 'Dev Patel'].map((name, i) => ({
@@ -55,6 +61,7 @@ async function run() {
       password,
       headline: ['Founder, SaaS startup', 'Engineer', 'Designer', 'CTO', 'Marketing lead', 'Student'][i],
       interests: ['AI', 'Music', 'Startups'],
+      emailVerified: true,
     }))
   );
 
@@ -96,6 +103,7 @@ async function run() {
       { name: 'Festival Night Only', price: 999, quantity: 3000, access: 'in-person', description: 'Evening music festival entry' },
       { name: 'VIP All Access', price: 9999, quantity: 150, access: 'both', maxPerOrder: 4, description: 'Front rows, VIP lounge, speaker dinner' },
     ],
+    groupDiscount: { minQty: 5, percent: 10 },
     registrationFields: [
       { label: 'Company', type: 'text', required: true },
       { label: 'Job role', type: 'select', options: ['Founder/CXO', 'Engineering', 'Product', 'Marketing', 'Student', 'Other'], required: true },
@@ -133,7 +141,7 @@ async function run() {
     tags: ['Music', 'EDM', 'Outdoor'], location: { venue: venues[1]._id, venueName: venues[1].name, city: 'Bengaluru', state: 'Karnataka' },
     modules: { ticketing: true, agenda: true, checkin: true, budget: true },
     ticketTypes: [
-      { name: 'Early Bird', price: 1499, quantity: 2000, maxPerOrder: 6 },
+      { name: 'Early Bird', price: 1499, quantity: 2000, maxPerOrder: 6, salesEnd: inDays(10, 23) },
       { name: 'General', price: 1999, quantity: 15000, maxPerOrder: 6 },
       { name: 'Fan Pit', price: 3999, quantity: 1000, maxPerOrder: 4 },
     ],
@@ -173,6 +181,16 @@ async function run() {
   });
 
   // ---------- Sponsors / Expo booths ----------
+  // ---------- Vendor marketplace: halls, caterers, planners, decorators, photographers ----------
+  await Vendor.create(demoVendors(organizer));
+
+  // ---------- Promo codes for the summit ----------
+  await Coupon.create([
+    { event: summit._id, code: 'LAUNCH20', description: '20% off for the LinkedIn launch campaign', type: 'percent', value: 20, maxUses: 200, validTo: inDays(20, 23) },
+    { event: summit._id, code: 'FLAT500', description: 'Rs 500 off Delegate tickets', type: 'flat', value: 500, ticketTypeIds: [summit.ticketTypes[1]._id] },
+    { event: summit._id, code: 'SPEAKER100', description: 'Free passes for speakers', type: 'percent', value: 100, maxUses: 10 },
+  ]);
+
   await Booth.create([
     { event: summit._id, sponsorName: 'CloudNova', tier: 'platinum', description: 'GPU cloud built for Indian startups. Free credits for attendees.', website: 'https://example.com', physicalLocation: 'Hall 1, Stall P1', resources: [{ title: 'Startup credits programme', url: 'https://example.com' }], visits: 312 },
     { event: summit._id, sponsorName: 'PayLoop', tier: 'gold', description: 'UPI AutoPay and subscriptions API.', website: 'https://example.com', physicalLocation: 'Hall 1, Stall G3', visits: 188 },
@@ -205,7 +223,7 @@ async function run() {
         createdAt: new Date(Date.now() - (i % 6) * day),
       });
       await Ticket.create({
-        order: order._id, event: summit._id, user: buyer._id, ticketTypeId: tt._id, ticketTypeName: tt.name,
+        order: order._id, event: summit._id, user: buyer._id, purchaser: buyer._id, ticketTypeId: tt._id, ticketTypeName: tt.name,
         access: tt.access, holderName: buyer.name, holderEmail: buyer.email, code: code(), checkedIn: false,
       });
       await Event.updateOne({ _id: summit._id, 'ticketTypes._id': tt._id }, { $inc: { 'ticketTypes.$.sold': qty } });

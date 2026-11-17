@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { dateLong, money, num } from '../utils/format.js';
+import CheckIn from '../components/CheckIn.jsx';
 
 function Bars({ rows, label, value, format = num }) {
   const max = Math.max(1, ...rows.map((r) => r[value]));
@@ -110,7 +111,7 @@ function Attendees({ event }) {
               <td>{t.ticketTypeName}<div className="muted tiny">{t.access}</div></td>
               <td><code>{t.code}</code></td>
               <td>{t.order?.attribution?.source || 'direct'}</td>
-              <td>{t.checkedIn ? <span className="pill ok">Checked in</span> : <span className="pill subtle">Registered</span>}</td>
+              <td>{t.status === 'cancelled' ? <span className="pill warn">Cancelled</span> : t.checkedIn ? <span className="pill ok">Checked in</span> : <span className="pill subtle">Registered</span>}</td>
             </tr>
           ))}
         </tbody>
@@ -120,103 +121,67 @@ function Attendees({ event }) {
   );
 }
 
-// Offline-capable gate check-in: downloads the manifest, validates locally when offline, syncs later
-function CheckIn({ event }) {
-  const key = `es_manifest_${event._id}`;
-  const queueKey = `es_queue_${event._id}`;
-  const [manifest, setManifest] = useState(() => JSON.parse(localStorage.getItem(key) || 'null'));
-  const [queue, setQueue] = useState(() => JSON.parse(localStorage.getItem(queueKey) || '[]'));
-  const [offline, setOffline] = useState(!navigator.onLine);
-  const [gate, setGate] = useState('Gate 1');
-  const [code, setCode] = useState('');
-  const [last, setLast] = useState(null);
-  const [log, setLog] = useState([]);
-  const inputRef = useRef(null);
+// Gate staff: people who can scan tickets for this event and nothing else
+function GateStaff({ event }) {
+  const [staff, setStaff] = useState(null);
+  const [email, setEmail] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const gateUrl = `${window.location.origin}/gate/${event._id}`;
 
-  useEffect(() => { localStorage.setItem(queueKey, JSON.stringify(queue)); }, [queue, queueKey]);
+  useEffect(() => {
+    api.get(`/events/${event._id}/staff`).then((r) => setStaff(r.data)).catch((e) => setMsg({ type: 'error', text: errMsg(e) }));
+  }, [event._id]);
 
-  async function download() {
-    const { data } = await api.get(`/tickets/manifest/${event._id}`);
-    localStorage.setItem(key, JSON.stringify(data));
-    setManifest(data);
-  }
-
-  async function sync() {
-    if (!queue.length) return;
-    const { data } = await api.post('/tickets/checkin/sync', { eventId: event._id, scans: queue });
-    setQueue([]);
-    setLog((l) => [...data.results.map((r) => ({ ...r, synced: true })), ...l].slice(0, 50));
-    await download();
-  }
-
-  function localCheck(c) {
-    const t = manifest?.tickets.find((x) => x.code === c);
-    if (!t) return { code: c, result: 'invalid', message: 'Not in downloaded list' };
-    if (t.checkedIn || queue.some((s) => s.code === c)) return { code: c, result: 'duplicate', holderName: t.holderName, message: 'Already scanned' };
-    setQueue((q) => [...q, { code: c, gate, at: new Date().toISOString() }]);
-    return { code: c, result: 'ok', holderName: t.holderName, ticketTypeName: t.ticketTypeName, offline: true };
-  }
-
-  async function scan(e) {
+  async function add(e) {
     e.preventDefault();
-    const c = code.trim().toUpperCase();
-    if (!c) return;
-    let r;
-    if (offline) r = localCheck(c);
-    else {
-      try {
-        r = (await api.post('/tickets/checkin', { eventId: event._id, code: c, gate })).data;
-      } catch {
-        r = localCheck(c); // network dropped mid-event -> fall back automatically
-      }
+    setBusy(true);
+    setMsg(null);
+    try {
+      const { data } = await api.post(`/events/${event._id}/staff`, { email });
+      setStaff(data);
+      setMsg({ type: 'success', text: `${email} can now scan tickets for this event. We emailed them the link.` });
+      setEmail('');
+    } catch (err) {
+      setMsg({ type: 'error', text: errMsg(err) });
+    } finally {
+      setBusy(false);
     }
-    setLast(r);
-    setLog((l) => [r, ...l].slice(0, 50));
-    setCode('');
-    inputRef.current?.focus();
+  }
+  async function remove(s) {
+    if (!window.confirm(`Remove ${s.name || s.email} from the check-in team?`)) return;
+    try { setStaff((await api.delete(`/events/${event._id}/staff/${s._id}`)).data); setMsg(null); } catch (err) { setMsg({ type: 'error', text: errMsg(err) }); }
   }
 
   return (
-    <div className="grid-2">
-      <div className="card">
-        <div className="row between">
-          <h4 className="no-margin">Gate scanner</h4>
-          <label className="check small"><input type="checkbox" checked={offline} onChange={(e) => setOffline(e.target.checked)} /> Offline mode</label>
-        </div>
-        <label>Gate<input value={gate} onChange={(e) => setGate(e.target.value)} /></label>
-        <form onSubmit={scan}>
-          <label>Ticket code (type or use a USB/Bluetooth QR scanner)
-            <input ref={inputRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)} placeholder="ES-XXXXXXXXXX" />
-          </label>
-          <button className="btn block">Check in</button>
-        </form>
-        {last && (
-          <div className={`scan-result ${last.result}`}>
-            <b>{last.result === 'ok' ? '✓ Welcome' : last.result === 'duplicate' ? '⚠ Already checked in' : '✕ Invalid ticket'}</b>
-            <div>{last.holderName} {last.ticketTypeName && `· ${last.ticketTypeName}`}</div>
-            {last.message && <div className="small">{last.message}</div>}
-            {last.offline && <div className="tiny">Saved offline — sync when back online</div>}
-          </div>
-        )}
-      </div>
-      <div className="card">
-        <h4>Offline kit</h4>
-        <p className="small muted">
-          {manifest ? `${manifest.tickets.length} tickets downloaded ${dateLong(manifest.downloadedAt)}` : 'No ticket list on this device yet.'}
-        </p>
-        <div className="row gap">
-          <button className="btn ghost sm" onClick={download}>Download ticket list</button>
-          <button className="btn sm" disabled={!queue.length} onClick={sync}>Sync {queue.length} offline scans</button>
-        </div>
-        <h4>Recent scans</h4>
-        <div className="scan-log">
-          {log.map((r, i) => (
-            <div key={i} className={`small ${r.result}`}>
-              {r.result === 'ok' ? '✓' : r.result === 'duplicate' ? '⚠' : '✕'} {r.code} {r.holderName && `· ${r.holderName}`} {r.synced && '(synced)'}
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="card gate-staff">
+      <h4>Gate staff</h4>
+      <p className="small muted">
+        Add volunteers or security staff by email. They log in with their own account and can only scan tickets for this event —
+        they cannot see revenue, attendee lists or settings.
+      </p>
+      {staff?.length > 0 && (
+        <table className="table">
+          <thead><tr><th>Name</th><th>Email</th><th>Added</th><th /></tr></thead>
+          <tbody>
+            {staff.map((s) => (
+              <tr key={s._id}>
+                <td><b>{s.name}</b></td>
+                <td>{s.email}</td>
+                <td>{dateLong(s.addedAt)}</td>
+                <td className="right"><button className="icon-btn" title="Remove" onClick={() => remove(s)}>✕</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {staff && !staff.length && <p className="small">No gate staff yet — only you can check people in.</p>}
+      <form className="row gap wrap" onSubmit={add}>
+        <input className="grow staff-email" type="email" required placeholder="volunteer@example.com" aria-label="Staff email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <button className="btn sm" disabled={busy}>{busy ? 'Adding…' : 'Add to check-in team'}</button>
+      </form>
+      {msg && <div className={`alert ${msg.type}`}>{msg.text}</div>}
+      <p className="small muted">Staff open this address on their phone: <code>{gateUrl}</code></p>
     </div>
   );
 }
@@ -267,6 +232,295 @@ function Budget({ event, onSaved }) {
         <button className="btn sm" onClick={save}>Save budget</button>
         {msg && <span className="small muted">{msg}</span>}
       </div>
+    </div>
+  );
+}
+
+const ORDER_STATUS = { paid: ['Paid', 'ok'], partially_refunded: ['Partly refunded', 'warn'], refunded: ['Refunded', 'subtle'] };
+
+// Orders, refund requests from buyers, and refunds
+function Orders({ event }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [refund, setRefund] = useState(null); // { order, picked: [ticketIds], reason, fromRequest }
+  const [busy, setBusy] = useState(false);
+  const m = (n) => money(n, event.currency);
+
+  const load = () => api.get(`/events/${event._id}/orders`).then((r) => setData(r.data)).catch((e) => setError(errMsg(e)));
+  useEffect(() => { load(); }, [event._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // While an event cancellation is refunding everyone, keep the list fresh
+  const running = data?.cancellation?.startedAt && !data.cancellation.finishedAt;
+  useEffect(() => {
+    if (!running) return undefined;
+    const timer = setInterval(load, 3000);
+    return () => clearInterval(timer);
+  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openRefund = (order, ticketIds, fromRequest = false) => {
+    const live = order.tickets.filter((t) => t.status !== 'cancelled').map((t) => t._id);
+    setRefund({ order, picked: ticketIds || live, reason: '', fromRequest });
+    setError('');
+    setNotice('');
+  };
+
+  async function submitRefund(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const { data: r } = await api.post(`/orders/${refund.order._id}/refund`, { ticketIds: refund.picked, reason: refund.reason, fromRequest: refund.fromRequest });
+      setNotice(`${r.cancelled} ticket${r.cancelled === 1 ? '' : 's'} cancelled${r.amount > 0 ? ` and ${money(r.amount, r.currency)} refunded` : ''}. The buyer has been emailed.`);
+      setRefund(null);
+      await load();
+    } catch (err) {
+      setError(errMsg(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decline(ticket) {
+    const note = window.prompt('Message to the buyer (optional), e.g. "Refunds closed 7 days before the event"');
+    if (note === null) return;
+    try {
+      await api.post(`/tickets/${ticket._id}/cancel-request/decline`, { note });
+      setNotice('Request declined. The buyer has been emailed.');
+      await load();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+  }
+
+  if (!data) return error ? <div className="alert error">{error}</div> : <div className="spinner" />;
+
+  const requests = data.orders.flatMap((o) => o.tickets.filter((t) => t.cancelRequest?.status === 'requested' && t.status !== 'cancelled').map((t) => ({ o, t })));
+  const shown = data.orders.filter((o) => `${o.buyer?.name} ${o.buyer?.email} ${String(o._id).slice(-8)}`.toLowerCase().includes(q.toLowerCase()));
+  const refundTotal = refund ? refund.order.tickets.filter((t) => refund.picked.includes(t._id)).reduce((s, t) => s + t.refundable, 0) : 0;
+  const allPicked = refund && refund.picked.length === refund.order.tickets.filter((t) => t.status !== 'cancelled').length;
+  const c = data.cancellation;
+
+  return (
+    <>
+      {c?.startedAt && (
+        <div className={`alert ${c.finishedAt && !c.failed ? 'success' : c.finishedAt ? 'error' : 'info'}`}>
+          {!c.finishedAt
+            ? 'This event was cancelled. Refunding every order and emailing attendees now…'
+            : `This event was cancelled: ${c.refunded} order${c.refunded === 1 ? '' : 's'} refunded and attendees emailed.${c.failed ? ` ${c.failed} refund${c.failed === 1 ? '' : 's'} could not be started - see the orders marked below and refund them again.` : ''}`}
+        </div>
+      )}
+      {notice && <div className="alert success">{notice}</div>}
+      {error && !refund && <div className="alert error">{error}</div>}
+
+      {requests.length > 0 && (
+        <div className="card">
+          <h4>Refund requests ({requests.length})</h4>
+          {requests.map(({ o, t }) => (
+            <div key={t._id} className="row between wrap request-row">
+              <div className="small">
+                <b>{o.buyer?.name}</b> · {t.ticketTypeName} for {t.holderName} · would refund <b>{m(t.refundable)}</b>
+                <div className="muted">{t.cancelRequest.reason ? `"${t.cancelRequest.reason}"` : 'No reason given'}</div>
+              </div>
+              <div className="row gap">
+                <button className="btn sm" onClick={() => openRefund(o, [t._id], true)}>Approve & refund</button>
+                <button className="btn ghost sm" onClick={() => decline(t)}>Decline</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="row between">
+        <input className="search" placeholder="Search buyer name, email or order reference…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <span className="muted small">{shown.length} order{shown.length === 1 ? '' : 's'}</span>
+      </div>
+      <table className="table">
+        <thead><tr><th>Buyer</th><th>Tickets</th><th>Paid</th><th>Refunded</th><th>Status</th><th /></tr></thead>
+        <tbody>
+          {shown.map((o) => {
+            const live = o.tickets.filter((t) => t.status !== 'cancelled');
+            const [label, tone] = o.total === 0 && o.paymentStatus === 'refunded' ? ['Cancelled', 'subtle'] : ORDER_STATUS[o.paymentStatus] || [o.paymentStatus, 'subtle'];
+            return (
+              <tr key={o._id}>
+                <td>
+                  <b>{o.buyer?.name}</b>
+                  <div className="muted tiny">{o.buyer?.email} · #{String(o._id).slice(-8).toUpperCase()} · {dateLong(o.createdAt)}</div>
+                  {o.refundError && <div className="warn-text tiny">Refund failed: {o.refundError}</div>}
+                </td>
+                <td>
+                  {live.length} of {o.tickets.length} valid
+                  <div className="muted tiny">{[...new Set(o.tickets.map((t) => t.ticketTypeName))].join(', ')}</div>
+                </td>
+                <td>{o.total > 0 ? m(o.total) : 'Free'}{o.discount && <div className="muted tiny">{o.discount.label}</div>}</td>
+                <td>{o.refundedAmount > 0 ? m(o.refundedAmount) : '—'}</td>
+                <td><span className={`pill ${tone}`}>{label}</span></td>
+                <td className="right">{live.length > 0 && <button className="btn ghost sm" onClick={() => openRefund(o)}>{o.total > 0 ? 'Refund' : 'Cancel tickets'}</button>}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {!data.orders.length && <div className="empty">No orders yet.</div>}
+
+      {refund && (
+        <div className="modal-backdrop" onClick={() => setRefund(null)}>
+          <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submitRefund}>
+            <h2>{refund.order.total > 0 ? 'Refund tickets' : 'Cancel tickets'}</h2>
+            <p className="muted">{refund.order.buyer?.name} · order #{String(refund.order._id).slice(-8).toUpperCase()}</p>
+            {refund.order.tickets.filter((t) => t.status !== 'cancelled').map((t) => (
+              <label key={t._id} className="check small">
+                <input
+                  type="checkbox"
+                  checked={refund.picked.includes(t._id)}
+                  onChange={() => setRefund((r) => ({ ...r, picked: r.picked.includes(t._id) ? r.picked.filter((x) => x !== t._id) : [...r.picked, t._id] }))}
+                />
+                {t.ticketTypeName} · {t.holderName} {t.checkedIn && <span className="pill ok tiny">Checked in</span>}
+                {refund.order.total > 0 && <span className="muted"> · {m(t.refundable)}</span>}
+              </label>
+            ))}
+            <label>Reason (included in the email to the buyer)<input value={refund.reason} onChange={(e) => setRefund({ ...refund, reason: e.target.value })} placeholder="e.g. Duplicate booking" /></label>
+            <div className="summary">
+              <div className="row between"><b>{refund.order.total > 0 ? 'Refund to buyer' : 'Nothing to refund'}</b><b>{refund.order.total > 0 ? m(allPicked ? refund.order.total - refund.order.refundedAmount : refundTotal) : 'Free order'}</b></div>
+            </div>
+            <p className="small muted">
+              The selected tickets stop working at the gate and online straight away, and their seats go back on sale.
+              {refund.order.total > 0 && ' The money goes back to the payment method the buyer used, including the platform fee. This cannot be undone.'}
+            </p>
+            {error && <div className="alert error">{error}</div>}
+            <div className="row gap">
+              <button className="btn" disabled={busy || !refund.picked.length}>{busy ? 'Working…' : refund.order.total > 0 ? 'Refund now' : 'Cancel tickets'}</button>
+              <button type="button" className="btn ghost" onClick={() => setRefund(null)}>Keep as is</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
+  );
+}
+
+const blankCode = { code: '', type: 'percent', value: 10, maxUses: '', validTo: '', description: '', ticketTypeIds: [] };
+
+// Promo codes: create, pause, and see what each code sold
+function Promos({ event }) {
+  const [data, setData] = useState(null);
+  const [form, setForm] = useState(blankCode);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const m = (n) => money(n, event.currency);
+  const paidTypes = event.ticketTypes.filter((t) => t.price > 0);
+
+  const load = () => api.get(`/coupons/events/${event._id}`).then((r) => setData(r.data)).catch((e) => setError(errMsg(e)));
+  useEffect(() => { load(); }, [event._id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function add(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post(`/coupons/events/${event._id}`, {
+        ...form,
+        maxUses: Number(form.maxUses) || 0,
+        validTo: form.validTo ? new Date(form.validTo) : undefined,
+      });
+      setForm(blankCode);
+      await load();
+    } catch (err) {
+      setError(errMsg(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function toggle(c) {
+    try { await api.put(`/coupons/${c._id}`, { active: !c.active }); await load(); } catch (err) { setError(errMsg(err)); }
+  }
+  async function remove(c) {
+    if (!window.confirm(`Delete the code ${c.code}?`)) return;
+    try { await api.delete(`/coupons/${c._id}`); await load(); } catch (err) { setError(errMsg(err)); }
+  }
+  const toggleType = (id) =>
+    setForm((f) => ({ ...f, ticketTypeIds: f.ticketTypeIds.includes(id) ? f.ticketTypeIds.filter((x) => x !== id) : [...f.ticketTypeIds, id] }));
+
+  if (!data) return error ? <div className="alert error">{error}</div> : <div className="spinner" />;
+  const expired = (c) => c.validTo && new Date(c.validTo) < new Date();
+  const full = (c) => c.maxUses > 0 && c.used >= c.maxUses;
+  const g = data.group;
+
+  return (
+    <div className="grid-2">
+      <div>
+        {error && <div className="alert error">{error}</div>}
+        <table className="table">
+          <thead><tr><th>Code</th><th>Discount</th><th>Used</th><th>Tickets</th><th>Revenue</th><th>Given away</th><th /></tr></thead>
+          <tbody>
+            {data.coupons.map((c) => (
+              <tr key={c._id}>
+                <td>
+                  <code>{c.code}</code>{' '}
+                  {!c.active ? <span className="pill subtle tiny">Paused</span> : expired(c) ? <span className="pill warn tiny">Expired</span> : full(c) ? <span className="pill warn tiny">Used up</span> : <span className="pill ok tiny">Live</span>}
+                  <div className="muted tiny">
+                    {c.description}
+                    {c.validTo && ` · until ${dateLong(c.validTo)}`}
+                    {c.ticketTypeIds?.length > 0 && ` · only ${event.ticketTypes.filter((t) => c.ticketTypeIds.includes(t._id)).map((t) => t.name).join(', ')}`}
+                  </div>
+                </td>
+                <td>{c.type === 'percent' ? `${c.value}%` : m(c.value)}</td>
+                <td>{c.used}{c.maxUses > 0 ? ` / ${c.maxUses}` : ''}</td>
+                <td>{num(c.stats.tickets)}</td>
+                <td>{c.stats.revenue ? m(c.stats.revenue) : '—'}</td>
+                <td>{c.stats.discount ? m(c.stats.discount) : '—'}</td>
+                <td className="right">
+                  <button className="btn ghost sm" onClick={() => toggle(c)}>{c.active ? 'Pause' : 'Resume'}</button>{' '}
+                  {c.used === 0 && <button className="icon-btn" title="Delete" onClick={() => remove(c)}>✕</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!data.coupons.length && <div className="empty">No promo codes yet. Create one to track a campaign or give partners a discount.</div>}
+        <div className="card">
+          <h4>Group discount</h4>
+          {g.settings?.minQty >= 2 && g.settings.percent > 0 ? (
+            <p className="small">
+              <b>{g.settings.percent}% off</b> for orders with {g.settings.minQty} or more tickets.
+              Used on {num(g.stats.orders)} order{g.stats.orders === 1 ? '' : 's'} ({num(g.stats.tickets)} tickets){g.stats.discount ? `, ${m(g.stats.discount)} given away` : ''}.
+            </p>
+          ) : (
+            <p className="small muted">Switched off.</p>
+          )}
+          <p className="muted tiny">Change it under Edit → Tickets. "Used" counts orders; revenue is what you earned after the discount.</p>
+        </div>
+      </div>
+      <form className="card" onSubmit={add}>
+        <h4>New promo code</h4>
+        <label>Code<input required placeholder="LAUNCH20" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} /></label>
+        <div className="grid-2">
+          <label>Type
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <option value="percent">Percent off</option>
+              <option value="flat">Fixed amount off ({event.currency})</option>
+            </select>
+          </label>
+          <label>{form.type === 'percent' ? 'Percent' : `Amount (${event.currency})`}
+            <input type="number" required min={1} max={form.type === 'percent' ? 100 : undefined} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
+          </label>
+          <label>Max orders (blank = unlimited)<input type="number" min={0} value={form.maxUses} onChange={(e) => setForm({ ...form, maxUses: e.target.value })} /></label>
+          <label>Valid until (optional)<input type="datetime-local" value={form.validTo} onChange={(e) => setForm({ ...form, validTo: e.target.value })} /></label>
+        </div>
+        {paidTypes.length > 1 && (
+          <>
+            <p className="small no-margin"><b>Limit to ticket types</b> <span className="muted">(none ticked = all paid tickets)</span></p>
+            {paidTypes.map((t) => (
+              <label key={t._id} className="check small">
+                <input type="checkbox" checked={form.ticketTypeIds.includes(t._id)} onChange={() => toggleType(t._id)} /> {t.name}
+              </label>
+            ))}
+          </>
+        )}
+        <label>Note for your team (optional)<input placeholder="LinkedIn launch campaign" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+        <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Create code'}</button>
+        <p className="muted tiny">A 100% code makes tickets free, which is handy for speakers, sponsors and press.</p>
+      </form>
     </div>
   );
 }
@@ -331,16 +585,18 @@ export default function ManageEvent() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
-  const [tab, setTab] = useState('overview');
+  // A link such as /organize/<id>?tab=orders opens straight on that tab
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'overview');
   const [error, setError] = useState('');
 
   useEffect(() => { api.get(`/events/${id}`).then((r) => setEvent(r.data)).catch((e) => setError(errMsg(e))); }, [id]);
 
   async function setStatus(status) {
-    if (status === 'cancelled' && !window.confirm('Cancel this event? Attendees will no longer be able to register.')) return;
+    if (status === 'cancelled' && !window.confirm('Cancel this event?\n\nEvery ticket will be cancelled, every paid order refunded in full, and all attendees emailed. This cannot be undone.')) return;
     try {
       const { data } = await api.post(`/events/${id}/status`, { status });
       setEvent({ ...event, status: data.status });
+      if (status === 'cancelled') setTab('orders'); // refund progress shows there
     } catch (e) { setError(errMsg(e)); }
   }
   async function remove() {
@@ -353,6 +609,8 @@ export default function ManageEvent() {
   const tabs = [
     ['overview', 'Overview'],
     ['attendees', 'Attendees'],
+    ['orders', 'Orders & refunds'],
+    event.modules?.ticketing !== false && ['promos', 'Promo codes'],
     event.modules?.checkin && event.format !== 'virtual' && ['checkin', 'Check-in'],
     event.modules?.budget && ['budget', 'Budget'],
     event.modules?.expo && ['expo', 'Expo & sponsors'],
@@ -361,6 +619,12 @@ export default function ManageEvent() {
   return (
     <div className="page wide">
       {error && <div className="alert error">{error}</div>}
+      {event.moderation?.blocked && (
+        <div className="alert error">
+          This event was taken down by the platform team and is not visible or on sale: {event.moderation.reason}.
+          Tickets already sold stay valid. You can still edit the event and refund orders, but it cannot be published until it is restored - contact support.
+        </div>
+      )}
       <div className="row between">
         <div>
           <p className="eyebrow dark"><span className={`pill status-${event.status}`}>{event.status}</span> · {dateLong(event.startDate)}</p>
@@ -380,8 +644,15 @@ export default function ManageEvent() {
       </div>
       {tab === 'overview' && <Overview event={event} />}
       {tab === 'attendees' && <Attendees event={event} />}
-      {tab === 'checkin' && <CheckIn event={event} />}
+      {tab === 'checkin' && (
+        <>
+          <CheckIn event={event} />
+          <GateStaff event={event} />
+        </>
+      )}
       {tab === 'budget' && <Budget event={event} onSaved={(d) => setEvent({ ...event, budget: d.budget })} />}
+      {tab === 'orders' && <Orders key={event.status} event={event} />}
+      {tab === 'promos' && <Promos event={event} />}
       {tab === 'expo' && <Expo event={event} />}
     </div>
   );

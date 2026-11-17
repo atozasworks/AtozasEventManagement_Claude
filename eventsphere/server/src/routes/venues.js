@@ -3,6 +3,7 @@ import Venue from '../models/Venue.js';
 import VenueInquiry from '../models/VenueInquiry.js';
 import { protect, requireRole } from '../middleware/auth.js';
 import { ah, HttpError } from '../utils/http.js';
+import { notify, adminIds } from '../services/notify.js';
 
 const router = Router();
 
@@ -25,6 +26,23 @@ router.get(
   protect,
   ah(async (req, res) => {
     res.json(await VenueInquiry.find({ organizer: req.user._id }).sort({ createdAt: -1 }).populate('venue', 'name city').populate('event', 'title'));
+  })
+);
+
+// Quote requests people sent for venues I listed (admins also see requests for venues the platform listed)
+router.get(
+  '/inquiries/received',
+  protect,
+  ah(async (req, res) => {
+    const mine = { listedBy: req.user._id };
+    const venues = await Venue.find(req.user.role === 'admin' ? { $or: [mine, { listedBy: null }] } : mine).select('_id');
+    const rows = await VenueInquiry.find({ venue: { $in: venues.map((v) => v._id) }, organizer: { $ne: req.user._id } })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .populate('venue', 'name city')
+      .populate('organizer', 'name email phone organizationName')
+      .populate('event', 'title');
+    res.json(rows);
   })
 );
 
@@ -66,6 +84,14 @@ router.post(
       endDate,
       expectedAttendees,
       message,
+    });
+    const owners = venue.listedBy ? [venue.listedBy] : await adminIds();
+    const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '?');
+    notify(owners.filter((id) => String(id) !== String(req.user._id)), {
+      type: 'quote',
+      title: `Quote request for ${venue.name}`,
+      body: `${req.user.organizationName || req.user.name} (${req.user.email}) - ${day(startDate)} to ${day(endDate)}${expectedAttendees ? `, ${expectedAttendees} guests` : ''}${message ? ` - "${String(message).slice(0, 160)}"` : ''}`,
+      link: '/organize#quotes',
     });
     res.status(201).json(inquiry);
   })

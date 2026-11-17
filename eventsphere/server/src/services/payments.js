@@ -50,7 +50,7 @@ const simulated = {
     return { ok: true, method, paymentId: `simpay_${Date.now().toString(36)}`, reference: `SIM-${Date.now().toString(36).toUpperCase()}` };
   },
   async refund() {
-    return { ok: true, refundId: `simrfnd_${Date.now().toString(36)}` };
+    return { ok: true, refundId: `simrfnd_${Date.now().toString(36)}${crypto.randomBytes(2).toString('hex')}` };
   },
 };
 
@@ -121,15 +121,25 @@ function makeRazorpay() {
       };
     },
 
-    async refund(order) {
+    // amount is in rupees (or the order's currency); omit it to refund the whole order
+    async refund(order, amount = order.total, reason = 'Tickets could not be issued') {
       if (!order.gateway?.paymentId) return { ok: false };
       const r = await rzp.payments.refund(order.gateway.paymentId, {
-        amount: toMinorUnits(order.total),
-        notes: { orderId: String(order._id), reason: 'Tickets could not be issued' },
+        amount: toMinorUnits(amount),
+        notes: { orderId: String(order._id), reason: String(reason).slice(0, 200) },
       });
       return { ok: true, refundId: r.id };
     },
   };
+}
+
+// The gateway an order was paid through - a refund must go back the same way, whatever PAYMENT_MODE is today
+let razorpayAdapter;
+export function gatewayFor(order) {
+  if (order.gateway?.provider !== 'razorpay') return simulated;
+  razorpayAdapter ??= makeRazorpay();
+  if (!razorpayAdapter) throw new Error('This order was paid through Razorpay, but the Razorpay keys are not configured on the server');
+  return razorpayAdapter;
 }
 
 let cached;

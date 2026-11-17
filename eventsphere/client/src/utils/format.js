@@ -1,7 +1,8 @@
 export const money = (n, currency = 'INR') =>
   Number(n) === 0
     ? 'Free'
-    : new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n || 0);
+    : // Whole amounts stay short (₹1,000); amounts with paise show them (₹512.50) so fees and refunds are exact
+      new Intl.NumberFormat('en-IN', { style: 'currency', currency, minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2 }).format(n || 0);
 
 export const num = (n) => new Intl.NumberFormat('en-IN').format(Math.round(n || 0));
 
