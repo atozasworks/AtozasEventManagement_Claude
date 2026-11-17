@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,11 +24,17 @@ import venueRoutes from './routes/venues.js';
 import expoRoutes from './routes/expo.js';
 import networkingRoutes from './routes/networking.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envPath = path.resolve(__dirname, '../.env');
+dotenv.config({ path: envPath });
+
 const PORT = process.env.PORT || 5000;
+//const PORT = process.env.PORT || 3015;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/eventsphere';
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+//const CLIENT_URL = process.env.CLIENT_URL || 'https://emscloude.testatozas.in';
 if (!process.env.JWT_SECRET) {
-  console.warn('JWT_SECRET is not set - using an insecure development default. Create server/.env from .env.example.');
+  console.warn(`JWT_SECRET is not set. Upload .env to ${envPath}`);
   process.env.JWT_SECRET = 'dev-insecure-secret';
 }
 
@@ -56,10 +62,10 @@ app.use('/api/venues', venueRoutes);
 app.use('/api/expo', expoRoutes);
 app.use('/api/networking', networkingRoutes);
 
-// In production, serve the built React app from the same server
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDist = path.resolve(__dirname, '../../client/dist');
-if (process.env.NODE_ENV === 'production' && fs.existsSync(clientDist)) {
+// In production, serve the built React app from the live dist folder
+// const clientDist = path.resolve(__dirname, '../../client/dist');
+const clientDist = '/home/testatozas-emscloude/htdocs/emscloude.testatozas.in/dist';
+if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
   app.get(/^\/(?!api|socket\.io).*/, (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
 }
@@ -74,12 +80,20 @@ initSocket(io);
 connectDB(MONGO_URI)
   .then(() =>
     server.listen(PORT, () => {
-      console.log(`EventSphere API running on http://localhost:${PORT}`);
+      // console.log(`EventSphere API running on http://localhost:${PORT}`);
+      console.log(`EventSphere API running on https://emscloude.testatozas.in (port ${PORT})`);
       getGateway(); // logs which payment mode is active
     })
   )
   .catch((err) => {
+    const safeUri = String(MONGO_URI).replace(/\/\/([^:/@]+):([^@]+)@/, '//$1:***@');
     console.error('\nCould not connect to MongoDB:', err.message);
-    console.error('Is the MongoDB service running? (Windows: Services -> "MongoDB Server" -> Start)\n');
+    console.error('MONGO_URI:', safeUri);
+    if (/auth/i.test(err.message)) {
+      console.error('Username or password was rejected. In .env use:');
+      console.error('MONGO_URI=mongodb://USER:PASSWORD@127.0.0.1:27017/eventsphere?authSource=admin\n');
+    } else {
+      console.error('Check that MongoDB is running on this server and MONGO_URI in .env is correct.\n');
+    }
     process.exit(1);
   });

@@ -28,6 +28,7 @@ const code = () => 'ES-' + crypto.randomBytes(5).toString('hex').toUpperCase();
 
 async function run() {
   await connectDB(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/eventsphere');
+  //await connectDB(process.env.MONGO_URI || 'mongodb://emscloudeuser:A1b2c3d4e5@62.72.31.206:57423/emscloude?authSource=emscloude');
   await Promise.all(
     [User, Event, Venue, VenueInquiry, Order, Ticket, Booth, Connection, ChatMessage].map((m) => m.deleteMany({}))
   );
