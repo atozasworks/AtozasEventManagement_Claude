@@ -8,6 +8,7 @@ workshops and meetups — in-person, virtual and **hybrid** — in one modular s
 | Marketplace & discovery | Public event listing with search, city, category, format, free/paid filters, featured & popular sorting |
 | Self-service ticketing | Multiple ticket tiers, per-order limits, sold-out handling, oversell-proof inventory reservation |
 | Promo codes & discounts | Per-event promo codes (percent or fixed amount, usage limit, expiry, limited to chosen ticket types), 100% codes for free passes, early-bird sale windows per ticket type, group discount, sales report per code |
+| Promo invitation links | Every promo code has a shareable link (`/e/<event>?promo=CODE`) with a ready-made, editable message and buttons for WhatsApp, Facebook, X, LinkedIn, Telegram and email. A visitor who opens it sees the offer, and after logging in or signing up the code is applied to the booking automatically. Each network's link is tracked in Marketing attribution |
 | Payments (India) | Razorpay Standard Checkout (UPI / cards / net banking / wallets / EMI) with server-side verification and webhook safety net; simulated mode for demos; platform fee model |
 | Refunds & cancellations | Organizer refunds whole orders or single tickets (seat goes back on sale, ticket stops working), buyers request refunds from My Tickets (organizer approves or declines), free registrations cancel instantly, cancelling an event refunds every order and emails everyone, refund policy shown before payment |
 | Custom registration | Per-event custom questions (text, select, checkbox, required) |
@@ -138,6 +139,7 @@ eventsphere/
 | POST | /api/events/:id/status | draft / published / cancelled / completed |
 | GET | /api/events/:id/analytics | revenue, attribution, check-ins, budget, booths |
 | GET | /api/events/:id/attendees?format=csv | attendee export |
+| GET | /api/coupons/check?eventId=&code= | public: is this promo code usable, and what is it worth (used by invitation links) |
 | POST | /api/orders/quote | live price for a selection (group discount, optional `promoCode`) |
 | POST | /api/orders → /api/orders/:id/pay | two-step checkout (free orders complete in step 1); accepts `promoCode` |
 | GET | /api/events/:id/orders | organizer: orders with tickets, refund requests and refund history |

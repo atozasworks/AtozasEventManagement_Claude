@@ -418,6 +418,14 @@ td input, td select { margin: 0; }
 .promo-row input { margin: 0; flex: 1; text-transform: uppercase; }
 .promo-row input::placeholder { text-transform: none; }
 .promo-remove { margin: 0 0 0 0.5rem; }
+/* Promo invitation links */
+.invite-note { font-size: 0.875rem; margin: 0 0 0.75rem; }
+.share-panel { margin-bottom: 1rem; border: 1px solid var(--brand); }
+.share-panel textarea { width: 100%; resize: vertical; }
+.share-link { display: flex; gap: 0.5rem; align-items: center; }
+.share-link input { margin: 0; flex: 1; min-width: 0; font-size: 0.85rem; }
+.share-buttons { margin: 0.5rem 0; }
+.share-open { display: block; margin: 0.25rem 0 0; padding: 0; white-space: nowrap; color: var(--brand); font-weight: 600; }
 
 /* ---------- Gate: camera scanner, live count, staff ---------- */
 .camera { position: relative; margin-top: 0.75rem; border-radius: 12px; overflow: hidden; background: #0d0f2a; aspect-ratio: 4 / 3; }
@@ -490,6 +498,14 @@ td input, td select { margin: 0; }
 .picked-date { background: #f6f7fc; border: 1px dashed var(--line); border-radius: 10px; padding: 0.6rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.9rem; color: var(--muted); }
 .picked-date.on { background: #e1f6ec; border-style: solid; border-color: #b6e3cb; color: #0b6b44; }
 .picked-date .link-btn { margin: 0 0 0 0.4rem; }
+/* Date line in the booking box: a click opens the availability calendar right under it */
+.date-picker { margin-bottom: 0.75rem; }
+.date-picker .picked-date { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; text-align: left; font: inherit; font-size: 0.9rem; cursor: pointer; margin-bottom: 0; }
+.date-picker .picked-date:hover { border-color: var(--brand); }
+.date-picker-cal { margin-top: 0.6rem; }
+.date-picker-cal .cal-day { font-size: 0.82rem; }
+.date-picker-cal .cal-legend { font-size: 0.72rem; gap: 0.3rem 0.75rem; }
+.date-picker-clear { display: inline-block; margin: 0.35rem 0 0; }
 .compare-bar { position: sticky; bottom: 1rem; margin-top: 1.5rem; background: var(--midnight); color: #fff; border-radius: 12px; padding: 0.7rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; box-shadow: 0 10px 30px rgba(13, 15, 42, 0.35); z-index: 10; }
 .compare-bar .btn.ghost { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
 .compare-modal { max-width: 980px; }

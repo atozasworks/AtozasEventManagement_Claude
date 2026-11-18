@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { dateLong, money, num } from '../utils/format.js';
 import CheckIn from '../components/CheckIn.jsx';
+import { defaultShareMessage, offerText, promoLink, shareTargets } from '../utils/promoLink.js';
 
 function Bars({ rows, label, value, format = num }) {
   const max = Math.max(1, ...rows.map((r) => r[value]));
@@ -401,12 +402,84 @@ function Orders({ event }) {
 
 const blankCode = { code: '', type: 'percent', value: 10, maxUses: '', validTo: '', description: '', ticketTypeIds: [] };
 
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Older browsers and non-HTTPS pages: fall back to a hidden text box
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { /* nothing more to try */ }
+    box.remove();
+    return ok;
+  }
+}
+
+// Invitation link for one promo code: whoever opens it gets the code applied automatically when they book
+function SharePromo({ event, coupon, problem, onClose }) {
+  const [message, setMessage] = useState(() => defaultShareMessage(event, coupon));
+  const [copied, setCopied] = useState('');
+  const link = promoLink(event, coupon.code);
+  const targets = shareTargets(event, coupon.code, message.trim());
+
+  async function copy(what, text) {
+    setCopied((await copyText(text)) ? what : 'failed');
+    setTimeout(() => setCopied(''), 2500);
+  }
+  async function nativeShare() {
+    try { await navigator.share({ title: event.title, text: message.trim(), url: promoLink(event, coupon.code, 'share') }); } catch { /* closed without sharing */ }
+  }
+
+  return (
+    <div className="card share-panel">
+      <div className="row between">
+        <h4 className="no-margin">Invitation link for <code>{coupon.code}</code> · {offerText(coupon, event.currency)}</h4>
+        <button type="button" className="icon-btn" title="Close" onClick={onClose}>✕</button>
+      </div>
+      <p className="muted small">
+        Anyone who opens this link sees the offer on the event page. After they log in or create an account, {coupon.code} is applied to their booking automatically - they never type it.
+      </p>
+      {event.status !== 'published' && <div className="alert info">This event is still a {event.status === 'draft' ? 'draft' : event.status + ' event'}. Publish it before sharing - until then visitors cannot open the page.</div>}
+      {problem && <div className="alert info">This code is {problem} right now, so the link opens the event at the normal price.</div>}
+      <label>Link
+        <div className="share-link">
+          <input readOnly aria-label="Invitation link" value={link} onFocus={(e) => e.target.select()} />
+          <button type="button" className="btn sm" onClick={() => copy('link', link)}>{copied === 'link' ? 'Copied ✓' : 'Copy link'}</button>
+        </div>
+      </label>
+      <label>Message (edit it before you post)
+        <textarea rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />
+      </label>
+      <div className="row gap wrap share-buttons">
+        {targets.map((t) => (
+          <a key={t.id} className={`btn ghost sm share-${t.id}`} href={t.href} target={t.id === 'email' ? undefined : '_blank'} rel="noreferrer">{t.label}</a>
+        ))}
+        {typeof navigator !== 'undefined' && navigator.share && <button type="button" className="btn ghost sm" onClick={nativeShare}>More apps…</button>}
+        <button type="button" className="btn ghost sm" onClick={() => copy('message', `${message.trim()}\n${link}`)}>{copied === 'message' ? 'Copied ✓' : 'Copy message + link'}</button>
+      </div>
+      {copied === 'failed' && <div className="alert error">Could not copy. Select the text and copy it by hand.</div>}
+      <p className="muted tiny">
+        Facebook and LinkedIn accept only the link, so paste your message there yourself ("Copy message + link").
+        Each button uses its own tracked link, so Overview → Marketing attribution shows which network brought the bookings.
+      </p>
+    </div>
+  );
+}
+
 // Promo codes: create, pause, and see what each code sold
 function Promos({ event }) {
   const [data, setData] = useState(null);
   const [form, setForm] = useState(blankCode);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Which code's invitation link is open. "?share=CODE" opens it straight after the event form created the code.
+  const [shareCode, setShareCode] = useState(() => (new URLSearchParams(window.location.search).get('share') || '').toUpperCase());
   const m = (n) => money(n, event.currency);
   const paidTypes = event.ticketTypes.filter((t) => t.price > 0);
 
@@ -418,13 +491,14 @@ function Promos({ event }) {
     setBusy(true);
     setError('');
     try {
-      await api.post(`/coupons/events/${event._id}`, {
+      const { data: created } = await api.post(`/coupons/events/${event._id}`, {
         ...form,
         maxUses: Number(form.maxUses) || 0,
         validTo: form.validTo ? new Date(form.validTo) : undefined,
       });
       setForm(blankCode);
       await load();
+      setShareCode(created.code); // show the invitation link for the new code straight away
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -445,11 +519,14 @@ function Promos({ event }) {
   const expired = (c) => c.validTo && new Date(c.validTo) < new Date();
   const full = (c) => c.maxUses > 0 && c.used >= c.maxUses;
   const g = data.group;
+  const sharing = data.coupons.find((c) => c.code === shareCode);
+  const problemOf = (c) => (!c.active ? 'paused' : expired(c) ? 'expired' : full(c) ? 'used up' : '');
 
   return (
     <div className="grid-2">
       <div>
         {error && <div className="alert error">{error}</div>}
+        {sharing && <SharePromo key={sharing._id} event={event} coupon={sharing} problem={problemOf(sharing)} onClose={() => setShareCode('')} />}
         <table className="table">
           <thead><tr><th>Code</th><th>Discount</th><th>Used</th><th>Tickets</th><th>Revenue</th><th>Given away</th><th /></tr></thead>
           <tbody>
@@ -463,6 +540,7 @@ function Promos({ event }) {
                     {c.validTo && ` · until ${dateLong(c.validTo)}`}
                     {c.ticketTypeIds?.length > 0 && ` · only ${event.ticketTypes.filter((t) => c.ticketTypeIds.includes(t._id)).map((t) => t.name).join(', ')}`}
                   </div>
+                  <button type="button" className="link-btn small share-open" onClick={() => { setShareCode(c.code); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Share link →</button>
                 </td>
                 <td>{c.type === 'percent' ? `${c.value}%` : m(c.value)}</td>
                 <td>{c.used}{c.maxUses > 0 ? ` / ${c.maxUses}` : ''}</td>
@@ -478,6 +556,7 @@ function Promos({ event }) {
           </tbody>
         </table>
         {!data.coupons.length && <div className="empty">No promo codes yet. Create one to track a campaign or give partners a discount.</div>}
+        {data.coupons.length > 0 && !sharing && <p className="muted tiny">"Share link" gives you an invitation link for social media: the code is applied automatically for anyone who books through it.</p>}
         <div className="card">
           <h4>Group discount</h4>
           {g.settings?.minQty >= 2 && g.settings.percent > 0 ? (

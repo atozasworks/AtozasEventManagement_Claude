@@ -131,6 +131,7 @@ export default function EventEditor() {
       // so pressing Save again can never create the event a second time.
       const notes = [];
       let created = 0;
+      let firstCode = ''; // its invitation link is opened on the dashboard, ready to share
       for (const p of promos) {
         const code = p.code.trim().toUpperCase();
         try {
@@ -144,6 +145,7 @@ export default function EventEditor() {
             ticketTypeIds: data.ticketTypes.filter((t) => (p.ticketNames || []).includes(t.name)).map((t) => t._id),
           });
           created++;
+          firstCode ||= code;
         } catch (e) {
           notes.push(`Promo code ${code} was not created: ${errMsg(e)}.`);
         }
@@ -156,7 +158,7 @@ export default function EventEditor() {
           notes.push(`The event was saved as a draft but could not be published: ${errMsg(e)}`);
         }
       }
-      navigate(`/organize/${data._id}${promos.length ? '?tab=promos' : ''}`, { state: notes.length ? { notice: notes.join(' ') } : undefined });
+      navigate(`/organize/${data._id}${promos.length ? `?tab=promos${firstCode ? `&share=${firstCode}` : ''}` : ''}`, { state: notes.length ? { notice: notes.join(' ') } : undefined });
     } catch (e) {
       setError(errMsg(e));
       window.scrollTo(0, 0);

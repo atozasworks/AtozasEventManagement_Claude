@@ -34,11 +34,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.resolve(__dirname, '../.env');
 dotenv.config({ path: envPath });
 
-const PORT = process.env.PORT || 5000;
-//const PORT = process.env.PORT || 3015;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/eventsphere';
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-//const CLIENT_URL = process.env.CLIENT_URL || 'https://emscloude.testatozas.in';
+//const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3015;
+//const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/eventsphere';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://emscloudeuser:A1b2c3d4e5@62.72.31.206:57423/emscloude?authSource=emscloude';
+//const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const CLIENT_URL = process.env.CLIENT_URL || 'https://emscloude.testatozas.in';
 if (!process.env.JWT_SECRET) {
   console.warn(`JWT_SECRET is not set. Upload .env to ${envPath}`);
   process.env.JWT_SECRET = 'dev-insecure-secret';

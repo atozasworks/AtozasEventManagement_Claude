@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { captureAttribution } from './api.js';
+import { capturePromo } from './utils/promoLink.js';
 
 import Home from './pages/Home.jsx';
 import EventDetail from './pages/EventDetail.jsx';
@@ -35,7 +36,10 @@ function RequireAuth({ children, organizer }) {
 }
 
 export default function App() {
-  useEffect(() => captureAttribution(), []);
+  useEffect(() => {
+    captureAttribution();
+    capturePromo(); // promo invitation links: /e/<slug>?promo=CODE
+  }, []);
 
   return (
     <>

@@ -4,6 +4,7 @@ import api, { errMsg, getAttribution } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { coverStyle, dateLong, money, time } from '../utils/format.js';
 import { openRazorpay, isTestKey } from '../utils/razorpay.js';
+import { savedPromo, forgetPromo, offerText } from '../utils/promoLink.js';
 
 const METHODS = [
   { id: 'upi', label: 'UPI', hint: 'GPay, PhonePe, Paytm, BHIM' },
@@ -33,10 +34,46 @@ export default function EventDetail() {
   const [promoMsg, setPromoMsg] = useState(null);
   const [attendees, setAttendees] = useState({}); // "ticketTypeId:index" -> { name, email } for tickets meant for other people
   const setAttendee = (key, patch) => setAttendees((a) => ({ ...a, [key]: { ...a[key], ...patch } }));
+  const [invite, setInvite] = useState(null); // promo code that arrived with an invitation link: { valid, code, type, value, ... }
 
   useEffect(() => {
     api.get(`/events/${slug}`).then((r) => setEvent(r.data)).catch((e) => setError(errMsg(e)));
   }, [slug]);
+
+  // Back from logging in or signing up: put the tickets they had chosen back in the box
+  useEffect(() => {
+    if (!event) return;
+    try {
+      const kept = JSON.parse(sessionStorage.getItem(`es_cart:${slug}`));
+      sessionStorage.removeItem(`es_cart:${slug}`);
+      if (!kept) return;
+      const restored = {};
+      for (const t of event.ticketTypes) {
+        const n = Math.min(Number(kept[t._id]) || 0, t.maxPerOrder, t.quantity - t.sold);
+        if (n > 0) restored[t._id] = n;
+      }
+      setQty(restored);
+    } catch { /* nothing kept */ }
+  }, [event, slug]);
+
+  // Opened through a promo invitation link (now, or earlier in this browser)? Ask what the code is worth.
+  const eventId = event?._id;
+  useEffect(() => {
+    const code = savedPromo(slug);
+    if (!eventId || !code) return;
+    let stale = false;
+    api
+      .get('/coupons/check', { params: { eventId, code } })
+      .then(({ data }) => {
+        if (stale) return;
+        setInvite(data);
+        if (!data.valid) forgetPromo(slug); // do not keep offering a dead code
+      })
+      // The check could not be reached (busy network, many visitors behind one connection): still try the code
+      // at checkout, where the price calculation has the final word.
+      .catch(() => { if (!stale) setInvite({ valid: true, code, unchecked: true }); });
+    return () => { stale = true; };
+  }, [slug, eventId]);
 
   useEffect(() => {
     if (user) setBuyer({ name: user.name, email: user.email, phone: user.phone || '' });
@@ -73,18 +110,32 @@ export default function EventDetail() {
   }
 
   async function startCheckout() {
-    if (!user) return navigate('/login', { state: { from: `/e/${slug}` } });
+    if (!user) {
+      // Keep the chosen tickets while they log in or sign up, so they do not have to pick again
+      try { sessionStorage.setItem(`es_cart:${slug}`, JSON.stringify(qty)); } catch { /* they just choose again */ }
+      return navigate('/login', { state: { from: `/e/${slug}` } });
+    }
     setFormError('');
     setPromoMsg(null);
     setBusy(true);
     try {
+      // A code typed earlier wins; otherwise use the one from the invitation link
+      const fromInvite = !applied && invite?.valid ? invite.code : '';
+      const code = applied || fromInvite;
       try {
-        const q = await loadQuote(applied);
-        if (applied && q.discount?.kind !== 'promo') setApplied('');
+        const q = await loadQuote(code);
+        if (q.discount?.kind === 'promo') {
+          setApplied(code);
+          if (fromInvite) setPromoMsg({ type: 'success', text: `${code} from your invitation link is applied. You save ${money(q.discount.amount, q.currency)}.` });
+        } else {
+          setApplied('');
+          if (fromInvite && q.promoNote) setPromoMsg({ type: 'info', text: q.promoNote });
+        }
       } catch (err) {
-        if (!applied) throw err;
-        setApplied(''); // the code no longer fits this selection - carry on without it
-        await loadQuote('');
+        if (!code) throw err;
+        setApplied(''); // the code does not fit this selection - carry on without it
+        const q = await loadQuote('');
+        if (fromInvite && q.listTotal > 0) setPromoMsg({ type: 'info', text: `${code} was not applied: ${errMsg(err)}.` });
       }
       setStep('details');
     } catch (err) {
@@ -114,6 +165,11 @@ export default function EventDetail() {
   }
 
   async function removePromo() {
+    if (invite && applied === invite.code) {
+      // The buyer chose not to use the invitation code: stop applying it automatically
+      forgetPromo(slug);
+      setInvite(null);
+    }
     setApplied('');
     setPromoMsg(null);
     try { await loadQuote(''); } catch (err) { setFormError(errMsg(err)); }
@@ -258,6 +314,23 @@ export default function EventDetail() {
           {step === 'select' && (
             <>
               <h3>Tickets</h3>
+              {invite?.valid && invite.unchecked && (
+                <div className="alert success invite-note">
+                  <b>Invitation code {invite.code}</b> from your link will be applied at checkout if it is still valid.
+                  {!user && ' Log in or create an account when you continue - the code stays with you.'}
+                </div>
+              )}
+              {invite?.valid && !invite.unchecked && (
+                <div className="alert success invite-note">
+                  <b>Invitation code {invite.code}: {offerText(invite, invite.currency)}</b>
+                  {invite.onlyFor?.length > 0 && ` on ${invite.onlyFor.join(', ')} tickets`}.
+                  {' '}It is applied automatically at checkout{invite.validTo ? `, until ${dateLong(invite.validTo)}` : ''}.
+                  {!user && ' Log in or create an account when you continue - the code stays with you.'}
+                </div>
+              )}
+              {invite && !invite.valid && (
+                <div className="alert info invite-note">The promo code {invite.code} in your link cannot be used: {invite.reason}. You can still book at the normal price.</div>
+              )}
               {event.ticketTypes.map((t) => {
                 const left = t.quantity - t.sold;
                 const notYet = t.salesStart && new Date(t.salesStart) > new Date();

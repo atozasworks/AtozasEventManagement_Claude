@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { lastInvitedSlug } from '../utils/promoLink.js';
 
 export default function VerifyEmail() {
   const [params] = useSearchParams();
@@ -9,6 +10,7 @@ export default function VerifyEmail() {
   const { user, ready, setUser } = useAuth();
   const [state, setState] = useState({ status: 'working', message: '' });
   const started = useRef(false);
+  const invited = lastInvitedSlug();
 
   useEffect(() => {
     if (!ready || started.current) return; // the link works once - never send it twice
@@ -36,7 +38,12 @@ export default function VerifyEmail() {
             <div className="big-check">✓</div>
             <h2>Email confirmed</h2>
             <p className="muted">{state.message} is now verified.</p>
-            <Link className="btn" to={user ? (user.role === 'attendee' ? '/' : '/organize') : '/login'}>{user ? 'Continue' : 'Log in'}</Link>
+            {invited ? (
+              // They signed up from a promo invitation link: take them back to that event, where the code is waiting
+              <Link className="btn" to={user ? `/e/${invited}` : '/login'} state={user ? undefined : { from: `/e/${invited}` }}>{user ? 'Continue to your event' : 'Log in to book'}</Link>
+            ) : (
+              <Link className="btn" to={user ? (user.role === 'attendee' ? '/' : '/organize') : '/login'}>{user ? 'Continue' : 'Log in'}</Link>
+            )}
           </>
         )}
         {state.status === 'error' && (

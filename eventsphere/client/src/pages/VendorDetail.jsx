@@ -26,6 +26,7 @@ export default function VendorDetail() {
   const [formError, setFormError] = useState('');
   const [done, setDone] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [calOpen, setCalOpen] = useState(true); // calendar under the date line: open for "Book a date", a click away for "Get a quote"
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
   useEffect(() => {
@@ -92,12 +93,9 @@ export default function VendorDetail() {
           <h3>Talk to them directly</h3>
           <ContactButtons vendor={vendor} />
           {vendor.contact?.email && <p className="small muted">{vendor.contact.email}</p>}
-
-          <h3>Availability</h3>
-          <AvailabilityCalendar vendorId={vendor._id} mode="pick" value={range} onChange={setRange} reloadKey={reloadKey} />
         </div>
 
-        <aside className="card sticky">
+        <aside className="card">
           {mine ? (
             <>
               <h3>This is your listing</h3>
@@ -115,15 +113,24 @@ export default function VendorDetail() {
           ) : (
             <>
               <div className="segmented">
-                <button type="button" className={tab === 'booking' ? 'on' : ''} onClick={() => { setTab('booking'); setFormError(''); }}>Book a date</button>
-                <button type="button" className={tab === 'quote' ? 'on' : ''} onClick={() => { setTab('quote'); setFormError(''); }}>Get a quote</button>
+                <button type="button" className={tab === 'booking' ? 'on' : ''} onClick={() => { setTab('booking'); setFormError(''); setCalOpen(true); }}>Book a date</button>
+                <button type="button" className={tab === 'quote' ? 'on' : ''} onClick={() => { setTab('quote'); setFormError(''); setCalOpen(false); }}>Get a quote</button>
                 {vendor.visitTypes?.length > 0 && <button type="button" className={tab === 'visit' ? 'on' : ''} onClick={() => { setTab('visit'); setFormError(''); }}>Visit / tasting</button>}
               </div>
 
               <form onSubmit={submit}>
                 {tab !== 'visit' && (
-                  <div className={`picked-date ${range ? 'on' : ''}`}>
-                    {range ? <><b>{niceDates(dates)}</b> <button type="button" className="link-btn tiny" onClick={() => setRange(null)}>Clear</button></> : tab === 'booking' ? 'Pick your date on the calendar' : 'No date chosen yet (optional): pick one on the calendar'}
+                  <div className="date-picker">
+                    {/* The availability calendar opens right here, under the date line */}
+                    <button type="button" className={`picked-date ${range ? 'on' : ''}`} aria-expanded={calOpen} onClick={() => setCalOpen((o) => !o)}>
+                      <span>{range ? <b>{niceDates(dates)}</b> : tab === 'booking' ? 'Pick your date on the calendar' : 'Pick a date on the calendar (optional)'}</span>
+                      <span aria-hidden="true">{calOpen ? '▴' : '▾'}</span>
+                    </button>
+                    {/* Hidden, not removed, when closed: it keeps the month you were looking at */}
+                    <div className="date-picker-cal" hidden={!calOpen}>
+                      <AvailabilityCalendar vendorId={vendor._id} mode="pick" value={range} onChange={setRange} reloadKey={reloadKey} />
+                    </div>
+                    {range && <button type="button" className="link-btn tiny date-picker-clear" onClick={() => setRange(null)}>Clear date</button>}
                   </div>
                 )}
                 {tab === 'visit' && (

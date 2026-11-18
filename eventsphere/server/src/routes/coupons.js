@@ -1,5 +1,8 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
+import { rateLimit } from 'express-rate-limit';
 import Coupon from '../models/Coupon.js';
+import Event from '../models/Event.js';
 import Order from '../models/Order.js';
 import { protect } from '../middleware/auth.js';
 import { ah, HttpError } from '../utils/http.js';
@@ -43,6 +46,39 @@ function checkCombination(c) {
   if (c.type === 'percent' && c.value > 100) throw new HttpError(400, 'A percentage discount cannot be more than 100');
   if (c.validFrom && c.validTo && c.validTo < c.validFrom) throw new HttpError(400, 'The end date must be after the start date');
 }
+
+// Invitation links (/e/<slug>?promo=CODE) ask this before the visitor has logged in, so the event page can
+// say what the code is worth. It answers for one event and one code only, and is rate limited against guessing.
+// The limit is generous because many phones share one address on Indian mobile networks.
+const checkLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false, message: { message: 'Too many promo code checks. Please wait a few minutes.' } });
+router.get(
+  '/check',
+  checkLimiter,
+  ah(async (req, res) => {
+    const code = normalizeCode(req.query.code);
+    const no = (reason) => res.json({ valid: false, code, reason });
+    if (!code || !mongoose.isValidObjectId(req.query.eventId)) return no('This promo code is not valid for this event');
+    const [event, coupon] = await Promise.all([
+      Event.findById(req.query.eventId).select('currency ticketTypes._id ticketTypes.name'),
+      Coupon.findOne({ event: req.query.eventId, code }),
+    ]);
+    const now = new Date();
+    if (!event || !coupon || !coupon.active) return no('This promo code is not valid for this event');
+    if (coupon.validFrom && coupon.validFrom > now) return no('This promo code is not active yet');
+    if (coupon.validTo && coupon.validTo < now) return no('This promo code has expired');
+    if (coupon.maxUses > 0 && coupon.used >= coupon.maxUses) return no('This promo code has been fully used');
+    const allowed = coupon.ticketTypeIds.map(String);
+    res.json({
+      valid: true,
+      code: coupon.code,
+      type: coupon.type,
+      value: coupon.value,
+      currency: event.currency,
+      validTo: coupon.validTo || null,
+      onlyFor: allowed.length ? event.ticketTypes.filter((t) => allowed.includes(String(t._id))).map((t) => t.name) : [],
+    });
+  })
+);
 
 // Codes for an event with how each one has performed (paid orders only)
 router.get(
