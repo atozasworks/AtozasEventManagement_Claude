@@ -93,8 +93,8 @@ initSocket(io);
 connectDB(MONGO_URI)
   .then(() =>
     server.listen(PORT, () => {
-      // console.log(`EventSphere API running on http://localhost:${PORT}`);
-      console.log(`EventSphere API running on https://emscloude.testatozas.in (port ${PORT})`);
+      console.log(`EventSphere API running on http://localhost:${PORT}`);
+      //console.log(`EventSphere API running on https://emscloude.testatozas.in (port ${PORT})`);
       getGateway(); // logs which payment mode is active
       console.log(`Email: ${emailConfigured() ? `SMTP via ${process.env.SMTP_HOST}` : 'not configured - messages are saved to server/.outbox'}`);
       startReminderScheduler();

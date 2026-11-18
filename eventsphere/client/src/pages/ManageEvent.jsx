@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { dateLong, money, num } from '../utils/format.js';
 import CheckIn from '../components/CheckIn.jsx';
@@ -584,6 +584,7 @@ function Expo({ event }) {
 export default function ManageEvent() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [event, setEvent] = useState(null);
   // A link such as /organize/<id>?tab=orders opens straight on that tab
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'overview');
@@ -619,6 +620,8 @@ export default function ManageEvent() {
   return (
     <div className="page wide">
       {error && <div className="alert error">{error}</div>}
+      {/* Message carried over from the event form, e.g. "2 promo codes created." */}
+      {location.state?.notice && <div className="alert info">{location.state.notice}</div>}
       {event.moderation?.blocked && (
         <div className="alert error">
           This event was taken down by the platform team and is not visible or on sale: {event.moderation.reason}.

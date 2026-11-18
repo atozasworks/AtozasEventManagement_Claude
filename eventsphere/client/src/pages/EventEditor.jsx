@@ -56,10 +56,14 @@ export default function EventEditor() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(!id);
+  // Promo codes typed in this form. They are created together with the event when it is saved.
+  const [promos, setPromos] = useState([]);
+  const [existingPromos, setExistingPromos] = useState([]); // codes the event already has (edit mode)
 
   useEffect(() => {
     api.get('/venues').then((r) => setVenues(r.data)).catch(() => {});
     if (id) {
+      api.get(`/coupons/events/${id}`).then((r) => setExistingPromos(r.data.coupons)).catch(() => {});
       api.get(`/events/${id}`).then((r) => {
         const d = r.data;
         setEv({ ...blank, ...d, location: { ...blank.location, ...d.location, venue: d.location?.venue }, integrations: { ...blank.integrations, ...d.integrations }, groupDiscount: { ...blank.groupDiscount, ...d.groupDiscount } });
@@ -86,7 +90,28 @@ export default function EventEditor() {
     }));
   }
 
+  // Catch promo code mistakes before anything is saved
+  function promoProblem() {
+    const seen = new Set(existingPromos.map((p) => p.code));
+    for (const p of promos) {
+      const code = p.code.trim().toUpperCase();
+      if (!code) return 'A promo code row is empty. Type a code or remove the row.';
+      if (!/^[A-Z0-9_-]{3,24}$/.test(code)) return `Promo code "${p.code}" must be 3-24 characters: letters, numbers, - or _ (no spaces).`;
+      if (seen.has(code)) return `The promo code ${code} is used twice.`;
+      seen.add(code);
+      if (!(Number(p.value) > 0)) return `Enter the discount for promo code ${code}.`;
+      if (p.type === 'percent' && Number(p.value) > 100) return `Promo code ${code}: a percentage cannot be more than 100.`;
+    }
+    return '';
+  }
+
   async function save(publish) {
+    const problem = promoProblem();
+    if (problem) {
+      setError(problem);
+      window.scrollTo(0, 0);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -101,8 +126,37 @@ export default function EventEditor() {
       };
       if (!payload.location.venue) delete payload.location.venue;
       const { data } = id ? await api.put(`/events/${id}`, payload) : await api.post('/events', payload);
-      if (publish) await api.post(`/events/${data._id}/status`, { status: 'published' });
-      navigate(`/organize/${data._id}`);
+
+      // The event now exists. Whatever happens next, go to its dashboard rather than staying on this form,
+      // so pressing Save again can never create the event a second time.
+      const notes = [];
+      let created = 0;
+      for (const p of promos) {
+        const code = p.code.trim().toUpperCase();
+        try {
+          await api.post(`/coupons/events/${data._id}`, {
+            code,
+            type: p.type,
+            value: Number(p.value),
+            maxUses: Number(p.maxUses) || 0,
+            validTo: p.validTo ? new Date(p.validTo) : undefined,
+            // "Only for" is chosen by ticket name here, because new ticket types get their ids on save
+            ticketTypeIds: data.ticketTypes.filter((t) => (p.ticketNames || []).includes(t.name)).map((t) => t._id),
+          });
+          created++;
+        } catch (e) {
+          notes.push(`Promo code ${code} was not created: ${errMsg(e)}.`);
+        }
+      }
+      if (created) notes.unshift(`${created} promo code${created === 1 ? '' : 's'} created.`);
+      if (publish) {
+        try {
+          await api.post(`/events/${data._id}/status`, { status: 'published' });
+        } catch (e) {
+          notes.push(`The event was saved as a draft but could not be published: ${errMsg(e)}`);
+        }
+      }
+      navigate(`/organize/${data._id}${promos.length ? '?tab=promos' : ''}`, { state: notes.length ? { notice: notes.join(' ') } : undefined });
     } catch (e) {
       setError(errMsg(e));
       window.scrollTo(0, 0);
@@ -239,6 +293,62 @@ export default function EventEditor() {
           Example: 5 and 10 gives 10% off any order with 5 or more tickets. A buyer gets either this or a promo code, whichever saves more.
           Promo codes are managed in the "Promo codes" tab of the event dashboard.
         </p>
+      </section>
+
+      <section className="card" id="promo-codes">
+        <h3>Promo codes</h3>
+        <p className="muted small">
+          Optional. Give buyers a code for a percentage or a fixed amount off, for example LAUNCH20 for 20% off.
+          Codes are created when you save the event. Afterwards you can pause them and see what each one sold in the "Promo codes" tab of the event dashboard.
+        </p>
+        {existingPromos.length > 0 && (
+          <p className="small">
+            Already on this event:{' '}
+            {existingPromos.map((p) => (
+              <span key={p._id} className="tag">{p.code} · {p.type === 'percent' ? `${p.value}%` : `${ev.currency} ${p.value}`} off{!p.active && ' · paused'}</span>
+            ))}
+          </p>
+        )}
+        <ListEditor
+          items={promos}
+          onChange={setPromos}
+          addLabel="Add promo code"
+          add={() => ({ code: '', type: 'percent', value: 10, maxUses: '', validTo: '', ticketNames: [] })}
+          render={(p, up) => {
+            const paid = ev.ticketTypes.filter((t) => Number(t.price) > 0 && t.name);
+            return (
+              <div className="grid-4">
+                <label>Code<input placeholder="LAUNCH20" value={p.code} onChange={(e) => up({ code: e.target.value.toUpperCase() })} /></label>
+                <label>Discount type
+                  <select value={p.type} onChange={(e) => up({ type: e.target.value })}>
+                    <option value="percent">Percent off</option>
+                    <option value="flat">Fixed amount off ({ev.currency})</option>
+                  </select>
+                </label>
+                <label>{p.type === 'percent' ? 'Percent' : `Amount (${ev.currency})`}<input type="number" min={1} max={p.type === 'percent' ? 100 : undefined} value={p.value} onChange={(e) => up({ value: e.target.value })} /></label>
+                <label>Max orders (blank = unlimited)<input type="number" min={0} value={p.maxUses} onChange={(e) => up({ maxUses: e.target.value })} /></label>
+                <label className="span-2">Valid until (optional)<input type="datetime-local" value={p.validTo} onChange={(e) => up({ validTo: e.target.value })} /></label>
+                {paid.length > 1 && (
+                  <div className="span-2 small">
+                    <b>Only for</b> <span className="muted">(none ticked = all paid tickets)</span>
+                    <div className="row gap wrap">
+                      {paid.map((t) => (
+                        <label key={t._id || t.name} className="check small">
+                          <input
+                            type="checkbox"
+                            checked={p.ticketNames.includes(t.name)}
+                            onChange={() => up({ ticketNames: p.ticketNames.includes(t.name) ? p.ticketNames.filter((n) => n !== t.name) : [...p.ticketNames, t.name] })}
+                          /> {t.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          }}
+        />
+        <p className="muted tiny">A 100% code makes tickets free, which is handy for speakers, sponsors and press. A buyer gets either a promo code or the group discount, whichever saves more.</p>
       </section>
 
       <section className="card">
