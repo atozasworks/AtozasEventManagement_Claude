@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import NotificationBell from './NotificationBell.jsx';
 import { PwaHeaderButton } from './PwaInstall.jsx';
+import LanguageMenu from './LanguageMenu.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Navbar() {
@@ -47,6 +48,7 @@ export default function Navbar() {
           <NavLink to="/organize">{isOrganizer ? 'Organizer' : 'Host an event'}</NavLink>
         </nav>
         <div className="nav-right">
+          <LanguageMenu />
           <PwaHeaderButton />
           {user ? (
             <>
@@ -70,6 +72,7 @@ export default function Navbar() {
                       <span className="small muted">{user.email}</span>
                     </div>
                     <Link role="menuitem" to="/settings" onClick={() => setMenuOpen(false)}>Settings</Link>
+                    <Link role="menuitem" to="/settings#language" onClick={() => setMenuOpen(false)}>Language</Link>
                     <button
                       type="button"
                       role="menuitem"
