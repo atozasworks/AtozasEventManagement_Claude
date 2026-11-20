@@ -40,6 +40,7 @@ export const PHOTOS = {
   workshop: { id: 'photo-1753164725896-f0a39315ff8a', credit: 'Vitaly Gariev' },
   craft: { id: 'photo-1519233181562-35b0b8bb2b1d', credit: 'Maggie Markel' },
   exhibition: { id: 'photo-1752155222944-675c2c3bfafd', credit: 'Jin-Woo Lee' },
+  hall: { id: 'photo-1511578314322-379afb476865', credit: 'Headway' },
 };
 
 export const photo = (key, w = 1200) =>

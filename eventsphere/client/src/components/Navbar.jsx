@@ -21,6 +21,13 @@ const ICONS = {
       <path d="m15.6 8.4-2.1 5.1-5.1 2.1 2.1-5.1z" />
     </>
   ),
+  events: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M8 3.5V7M16 3.5V7M4 10h16" />
+      <path d="M8 14h.01M12 14h.01M16 14h.01" />
+    </>
+  ),
   venues: (
     <>
       <path d="M4 20V7l8-3 8 3v13" />
@@ -100,6 +107,7 @@ export default function Navbar() {
         </Link>
         <nav className="nav-links" aria-label="Main">
           <Item to="/" end icon="discover" long="Discover" short="Discover" />
+          <Item to="/events" icon="events" long="Events" short="Events" />
           <Item to="/venues" icon="venues" long="Venues" short="Venues" />
           <Item to="/vendors" icon="vendors" long="Vendors" short="Vendors" />
           {user && <Item to="/tickets" icon="tickets" long="My Tickets" short="Tickets" />}

@@ -7,6 +7,7 @@ import { captureAttribution } from './api.js';
 import { capturePromo } from './utils/promoLink.js';
 
 import Home from './pages/Home.jsx';
+import Events from './pages/Events.jsx';
 import EventDetail from './pages/EventDetail.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
@@ -51,6 +52,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/events" element={<Events />} />
           <Route path="/e/:slug" element={<EventDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -84,6 +86,7 @@ export default function App() {
           <nav>
             <b>Attend</b>
             <Link to="/">Discover events</Link>
+            <Link to="/events">All events</Link>
             <Link to="/tickets">My tickets</Link>
           </nav>
           <nav>
