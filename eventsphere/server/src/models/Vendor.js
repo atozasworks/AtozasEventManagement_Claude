@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 // What kinds of businesses can be listed, and the usual way each one prices and meets customers
 export const VENDOR_CATEGORIES = {
   'marriage-hall': { label: 'Marriage halls', priceUnit: 'per-day', visitTypes: ['site-visit'] },
+  'convention-centre': { label: 'Convention centres', priceUnit: 'per-day', visitTypes: ['site-visit', 'meeting'] },
+  'banquet-hall': { label: 'Banquet halls', priceUnit: 'per-day', visitTypes: ['site-visit'] },
   'event-planner': { label: 'Event planners', priceUnit: 'per-event', visitTypes: ['meeting'] },
   caterer: { label: 'Caterers', priceUnit: 'per-plate', visitTypes: ['tasting', 'meeting'] },
   decorator: { label: 'Decorators', priceUnit: 'per-event', visitTypes: ['meeting', 'site-visit'] },
@@ -11,7 +13,11 @@ export const VENDOR_CATEGORIES = {
 export const PRICE_UNITS = ['per-day', 'per-plate', 'per-event', 'per-hour'];
 export const VISIT_TYPES = ['site-visit', 'tasting', 'meeting'];
 
-/** A business listed in the vendor marketplace (a hall, caterer, planner, decorator or photographer). */
+/**
+ * A business listed through "List your business" (a hall, convention centre, banquet hall, caterer, planner,
+ * decorator or photographer). There is ONE record per business: the Vendors page and the Venues page both
+ * read this collection, so an edit, a pause or a new listing shows on both without any copying.
+ */
 const vendorSchema = new mongoose.Schema(
   {
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

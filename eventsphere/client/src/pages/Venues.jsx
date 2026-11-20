@@ -3,13 +3,23 @@ import { Link } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { money, num } from '../utils/format.js';
+import { VendorCard } from './Vendors.jsx';
+import { VENDOR_CATEGORIES } from '../utils/vendors.js';
 
 const TYPES = ['convention-centre', 'hotel', 'banquet', 'auditorium', 'outdoor', 'coworking', 'stadium'];
 
 export default function Venues() {
-  const { isOrganizer } = useAuth();
-  const [filters, setFilters] = useState({ city: '', type: '', minCapacity: '', maxPrice: '' });
+  const { user, isOrganizer } = useAuth();
+  const [filters, setFiltersRaw] = useState({ q: '', city: '', type: '', minCapacity: '', maxPrice: '' });
   const [venues, setVenues] = useState([]);
+  // Businesses added through "List your business". They are read from the same listings the Vendors page
+  // shows (GET /vendors), never copied, so a new listing or an edit appears on both pages.
+  const [category, setCategory] = useState('');
+  const [bizPage, setBizPage] = useState(1);
+  const [biz, setBiz] = useState(null);
+  const [bizError, setBizError] = useState('');
+  const setFilters = (next) => { setFiltersRaw(next); setBizPage(1); };
+  const pickCategory = (id) => { setCategory(id); setBizPage(1); };
   const [inquire, setInquire] = useState(null);
   const [form, setForm] = useState({ startDate: '', endDate: '', expectedAttendees: '', message: '' });
   const [msg, setMsg] = useState('');
@@ -18,6 +28,16 @@ export default function Venues() {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
     api.get('/venues', { params }).then((r) => setVenues(r.data));
   }, [filters]);
+
+  // Search, city, guests and price apply to the listed businesses too (only live listings come back)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const wanted = { category, q: filters.q, city: filters.city, guests: filters.minCapacity, maxBudget: filters.maxPrice, page: bizPage };
+      const params = Object.fromEntries(Object.entries(wanted).filter(([, v]) => v !== '' && v != null));
+      api.get('/vendors', { params }).then((r) => { setBiz(r.data); setBizError(''); }).catch((e) => setBizError(errMsg(e)));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [category, filters.q, filters.city, filters.minCapacity, filters.maxPrice, bizPage]);
 
   async function send(e) {
     e.preventDefault();
@@ -34,7 +54,8 @@ export default function Venues() {
     <div className="page">
       <h1>Find a venue</h1>
       <p className="muted">From 100-seat workshop rooms to 40,000-capacity festival grounds.</p>
-      <div className="filter-bar card">
+      <div className="filter-bar card venue-filters">
+        <label>Search<input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Name, e.g. Grand Hall" /></label>
         <label>City<input value={filters.city} onChange={(e) => setFilters({ ...filters, city: e.target.value })} placeholder="Bengaluru" /></label>
         <label>Type
           <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
@@ -63,6 +84,42 @@ export default function Venues() {
         ))}
       </div>
       {!venues.length && <div className="empty">No venues match.</div>}
+
+      <section className="listed-businesses">
+        <div className="row between wrap">
+          <div>
+            <h2 className="no-margin">Listed businesses</h2>
+            <p className="muted small">
+              Marriage halls, convention centres, banquet halls, event planners, caterers, decorators and photographers, listed by their owners.
+              The same listings are on the <Link to="/vendors">Vendors page</Link>.
+            </p>
+          </div>
+          <Link className="btn ghost sm" to={user ? '/vendors/hub?tab=listings' : '/login'} state={user ? undefined : { from: '/vendors/hub?tab=listings' }}>List your business</Link>
+        </div>
+        <div className="filter-row">
+          <button className={`chip-btn ${category === '' ? 'on' : ''}`} onClick={() => pickCategory('')}>All</button>
+          {VENDOR_CATEGORIES.map((c) => (
+            <button key={c.id} className={`chip-btn ${category === c.id ? 'on' : ''}`} onClick={() => pickCategory(c.id)}>{c.icon} {c.label}</button>
+          ))}
+        </div>
+        {bizError && <div className="alert error">{bizError}</div>}
+        {!biz ? (!bizError && <div className="spinner" />) : (
+          <>
+            <p className="muted small">{biz.total} business{biz.total === 1 ? '' : 'es'} found. Search, city, guests and price above apply here too.</p>
+            <div className="vendor-grid">
+              {biz.items.map((v) => <VendorCard key={v._id} vendor={v} />)}
+            </div>
+            {!biz.items.length && <div className="empty">No listed businesses match. Try another category or city.</div>}
+            {biz.pages > 1 && (
+              <div className="row gap pager">
+                <button className="btn ghost sm" disabled={bizPage <= 1} onClick={() => setBizPage(bizPage - 1)}>← Previous</button>
+                <span className="small muted">Page {biz.page} of {biz.pages}</span>
+                <button className="btn ghost sm" disabled={bizPage >= biz.pages} onClick={() => setBizPage(bizPage + 1)}>Next →</button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
       {inquire && (
         <div className="modal-backdrop" onClick={() => setInquire(null)}>

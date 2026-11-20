@@ -16,7 +16,8 @@ router.get(
     if (type) filter.type = type;
     if (minCapacity) filter.capacity = { $gte: Number(minCapacity) };
     if (maxPrice) filter.pricePerDay = { $lte: Number(maxPrice) };
-    if (q) filter.name = new RegExp(q.replace(/[^\w\s]/g, ''), 'i');
+    // Matched literally (special characters escaped, not dropped), the same way the business listings are searched
+    if (q) filter.name = new RegExp(String(q).trim().slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     res.json(await Venue.find(filter).sort({ rating: -1, capacity: -1 }).limit(60));
   })
 );

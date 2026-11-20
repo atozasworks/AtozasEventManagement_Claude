@@ -20,7 +20,8 @@ const router = Router();
 // ---------- helpers ----------
 const HOUR = 60 * 60 * 1000;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
-const rx = (q) => new RegExp(String(q).replace(/[^\w\s]/g, ''), 'i');
+// Search text is matched literally: special characters are escaped, not dropped, so "A-One" or "Hi-Tech" still match
+const rx = (q) => new RegExp(String(q).trim().slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 const validDate = (d) => YMD.test(d || '') && !Number.isNaN(new Date(`${d}T00:00:00Z`).getTime()) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
 // "Today" in India, where the marketplace operates
 const today = () => new Date(Date.now() + 5.5 * HOUR).toISOString().slice(0, 10);

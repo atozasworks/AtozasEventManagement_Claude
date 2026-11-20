@@ -3,6 +3,8 @@ import { money, num } from './format.js';
 // The kinds of business in the marketplace. `tint` is the card colour used when a listing has no photo.
 export const VENDOR_CATEGORIES = [
   { id: 'marriage-hall', label: 'Marriage halls', one: 'Marriage hall', icon: '🏛️', tint: '#3a45c9', unit: 'per-day', visits: ['site-visit'] },
+  { id: 'convention-centre', label: 'Convention centres', one: 'Convention centre', icon: '🏢', tint: '#1d4ed8', unit: 'per-day', visits: ['site-visit', 'meeting'] },
+  { id: 'banquet-hall', label: 'Banquet halls', one: 'Banquet hall', icon: '🥂', tint: '#7c3aed', unit: 'per-day', visits: ['site-visit'] },
   { id: 'event-planner', label: 'Event planners', one: 'Event planner', icon: '📋', tint: '#0f766e', unit: 'per-event', visits: ['meeting'] },
   { id: 'caterer', label: 'Caterers', one: 'Caterer', icon: '🍽️', tint: '#b45309', unit: 'per-plate', visits: ['tasting', 'meeting'] },
   { id: 'decorator', label: 'Decorators', one: 'Decorator', icon: '💐', tint: '#be185d', unit: 'per-event', visits: ['meeting', 'site-visit'] },

@@ -47,7 +47,9 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+// "same-origin-allow-popups": the Razorpay payment window (a pop-up on razorpay.com) must be able to report back
+// to this page and close itself. With helmet's default ("same-origin") it stays stuck on "Payment successful".
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' } }));
 app.use(compression());
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));

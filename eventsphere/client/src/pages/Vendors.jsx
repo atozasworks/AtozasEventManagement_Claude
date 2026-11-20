@@ -31,6 +31,34 @@ export function ContactButtons({ vendor, small }) {
   );
 }
 
+/**
+ * One listing card. Used by the Vendors page and by the "Listed businesses" section of the Venues page,
+ * so a business looks and books the same wherever it is found.
+ *   date     keeps a chosen "free on" date when the booking page opens
+ *   compare  { checked, disabled, onToggle } adds the Compare tick box (Vendors page only)
+ */
+export function VendorCard({ vendor: v, date, compare }) {
+  return (
+    <div className="card vendor-card">
+      <Link to={`/vendors/${v._id}`}><VendorCover vendor={v} /></Link>
+      <div className="vendor-body">
+        <span className="pill subtle">{categoryOf(v.category).one}</span>
+        <h3><Link to={`/vendors/${v._id}`}>{v.name}</Link></h3>
+        <p className="small muted">{v.city}{v.state && `, ${v.state}`} · {capacityText(v)}</p>
+        {v.tagline && <p className="small">{v.tagline}</p>}
+        <p className="price">{priceText(v)}</p>
+        <div className="tags">{v.services?.slice(0, 4).map((s) => <span key={s} className="tag">{s}</span>)}</div>
+        <div className="row between wrap vendor-actions">
+          {compare ? (
+            <label className="check small"><input type="checkbox" checked={compare.checked} disabled={compare.disabled} onChange={compare.onToggle} /> Compare</label>
+          ) : <span />}
+          <Link className="btn sm" to={`/vendors/${v._id}${date ? `?date=${date}` : ''}`}>Check dates &amp; book</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Vendors() {
   const { user } = useAuth();
   const [f, setF] = useState({ category: '', q: '', city: '', guests: '', maxBudget: '', date: '', sort: 'price' });
@@ -60,7 +88,7 @@ export default function Vendors() {
       <div className="row between wrap">
         <div>
           <h1 className="no-margin">Halls, caterers and everyone else your event needs</h1>
-          <p className="muted">Search, compare and book marriage halls, event planners, caterers, decorators and photographers.</p>
+          <p className="muted">Search, compare and book marriage halls, convention centres, banquet halls, event planners, caterers, decorators and photographers.</p>
         </div>
         <div className="row gap wrap">
           {user && <Link className="btn ghost" to="/vendors/hub">My bookings &amp; requests</Link>}
@@ -104,21 +132,12 @@ export default function Vendors() {
           </p>
           <div className="vendor-grid">
             {data.items.map((v) => (
-              <div key={v._id} className="card vendor-card">
-                <Link to={`/vendors/${v._id}`}><VendorCover vendor={v} /></Link>
-                <div className="vendor-body">
-                  <span className="pill subtle">{categoryOf(v.category).one}</span>
-                  <h3><Link to={`/vendors/${v._id}`}>{v.name}</Link></h3>
-                  <p className="small muted">{v.city}{v.state && `, ${v.state}`} · {capacityText(v)}</p>
-                  {v.tagline && <p className="small">{v.tagline}</p>}
-                  <p className="price">{priceText(v)}</p>
-                  <div className="tags">{v.services?.slice(0, 4).map((s) => <span key={s} className="tag">{s}</span>)}</div>
-                  <div className="row between wrap vendor-actions">
-                    <label className="check small"><input type="checkbox" checked={picked(v)} disabled={!picked(v) && compare.length >= MAX_COMPARE} onChange={() => toggleCompare(v)} /> Compare</label>
-                    <Link className="btn sm" to={`/vendors/${v._id}${f.date ? `?date=${f.date}` : ''}`}>Check dates &amp; book</Link>
-                  </div>
-                </div>
-              </div>
+              <VendorCard
+                key={v._id}
+                vendor={v}
+                date={f.date}
+                compare={{ checked: picked(v), disabled: !picked(v) && compare.length >= MAX_COMPARE, onToggle: () => toggleCompare(v) }}
+              />
             ))}
           </div>
           {!data.items.length && <div className="empty">Nothing matches these filters. Try another city, a bigger budget or a different date.</div>}
