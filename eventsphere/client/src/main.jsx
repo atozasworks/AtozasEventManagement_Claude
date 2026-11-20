@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
+import { PwaInstallProvider } from './context/PwaInstallContext.jsx';
+import './pwa.js';
 import './styles.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -11,7 +13,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <App />
+          <PwaInstallProvider>
+            <App />
+          </PwaInstallProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

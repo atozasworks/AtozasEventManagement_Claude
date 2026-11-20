@@ -91,6 +91,24 @@ main { min-height: calc(100vh - 130px); }
 .nav-links a { color: #c9cdf0; padding: 0.4rem 0.75rem; border-radius: 8px; font-weight: 500; }
 .nav-links a.active, .nav-links a:hover { color: #fff; background: rgba(255, 255, 255, 0.08); text-decoration: none; }
 .nav-right { display: flex; gap: 0.5rem; align-items: center; }
+.pwa-header-btn { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.25); background: transparent; color: #fff; cursor: pointer; }
+.pwa-header-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.pwa-header-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pwa-card { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 35; width: min(380px, calc(100vw - 2rem)); background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 50px rgba(13, 15, 42, 0.22); padding: 0.95rem 0.95rem 0.85rem; }
+.pwa-card-top { display: flex; gap: 0.75rem; align-items: flex-start; }
+.pwa-icon { width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0; }
+.pwa-copy { min-width: 0; }
+.pwa-copy b { display: block; font-size: 1rem; }
+.pwa-copy p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.86rem; line-height: 1.35; }
+.pwa-close { margin-left: auto; border: none; background: transparent; color: var(--muted); font-size: 1.35rem; line-height: 1; cursor: pointer; padding: 0 0.15rem; }
+.pwa-close:hover { color: var(--ink); }
+.pwa-actions { display: grid; grid-template-columns: 1.15fr 1fr; gap: 0.6rem; margin-top: 0.9rem; }
+.pwa-install, .pwa-later { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; border-radius: 12px; padding: 0.7rem 0.8rem; font: inherit; font-weight: 700; cursor: pointer; }
+.pwa-install { background: #3d6b45; color: #fff; border: 1px solid #3d6b45; }
+.pwa-install:hover { background: #325838; }
+.pwa-later { background: var(--surface); color: var(--ink-2); border: 1px solid var(--line); }
+.pwa-later:hover { background: var(--hover); }
+.pwa-install:disabled, .pwa-later:disabled { opacity: 0.6; cursor: not-allowed; }
 .nav .chip { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .nav .btn.ghost { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
 

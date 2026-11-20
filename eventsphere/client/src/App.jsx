@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
+import { PwaInstallCard } from './components/PwaInstall.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { captureAttribution } from './api.js';
 import { capturePromo } from './utils/promoLink.js';
@@ -46,6 +47,7 @@ export default function App() {
     <>
       <Navbar />
       <VerifyBanner />
+      <PwaInstallCard />
       <main>
         <Routes>
           <Route path="/" element={<Home />} />

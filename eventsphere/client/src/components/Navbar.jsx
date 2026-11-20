@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import NotificationBell from './NotificationBell.jsx';
+import { PwaHeaderButton } from './PwaInstall.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Navbar() {
@@ -46,6 +47,7 @@ export default function Navbar() {
           <NavLink to="/organize">{isOrganizer ? 'Organizer' : 'Host an event'}</NavLink>
         </nav>
         <div className="nav-right">
+          <PwaHeaderButton />
           {user ? (
             <>
               <NotificationBell key={user._id} />
