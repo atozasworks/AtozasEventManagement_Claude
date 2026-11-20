@@ -1,8 +1,37 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { LANGUAGES, isLanguage, readLanguage, writeTranslateCookie } from '../languages.js';
+import { LANGUAGES, readLanguage, saveLanguage, writeTranslateCookie } from '../languages.js';
 
 const LanguageContext = createContext(null);
 let scriptStarted = false;
+
+const TRANSLATE_CHROME = [
+  'iframe.skiptranslate',
+  '.goog-te-banner-frame',
+  '.goog-te-balloon-frame',
+  '.goog-te-spinner-pos',
+  '.goog-tooltip',
+  '#goog-gt-tt',
+  '.VIpgJd-ZVi9od-ORHb',
+  '.VIpgJd-ZVi9od-aZ2wEe-wOHMyf',
+  'body > .skiptranslate',
+].join(',');
+
+function hideTranslateChrome() {
+  document.querySelectorAll(TRANSLATE_CHROME).forEach((el) => {
+    el.setAttribute('hidden', '');
+    el.style.setProperty('display', 'none', 'important');
+    el.style.setProperty('visibility', 'hidden', 'important');
+  });
+  const top = document.body?.style.top;
+  if (top && top !== '0px') document.body.style.setProperty('top', '0px', 'important');
+}
+
+function watchTranslateChrome() {
+  hideTranslateChrome();
+  const observer = new MutationObserver(hideTranslateChrome);
+  observer.observe(document.body, { childList: true, attributes: true, attributeFilter: ['style', 'class'] });
+  return () => observer.disconnect();
+}
 
 function loadGoogleTranslate() {
   if (scriptStarted || window.google?.translate?.TranslateElement) return;
@@ -20,6 +49,7 @@ function loadGoogleTranslate() {
       },
       'google_translate_element'
     );
+    hideTranslateChrome();
   };
   const script = document.createElement('script');
   script.id = 'google-translate-script';
@@ -34,25 +64,32 @@ export function LanguageProvider({ children }) {
   useEffect(() => {
     writeTranslateCookie(language);
     document.documentElement.lang = language === 'zh-CN' ? 'zh-CN' : language;
+    if (language === 'en') {
+      hideTranslateChrome();
+      return undefined;
+    }
     loadGoogleTranslate();
+    return watchTranslateChrome();
   }, [language]);
 
+  useEffect(() => {
+    const onShow = (event) => {
+      if (event.persisted && readLanguage() === 'en') window.location.reload();
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, []);
+
   const setLanguage = (code) => {
-    const next = isLanguage(code) ? code : 'en';
+    const next = saveLanguage(code);
     if (next === language) return;
-    try {
-      localStorage.setItem('es_lang', next);
-    } catch {
-      /* the cookie still carries the choice for this reload */
-    }
-    writeTranslateCookie(next);
     setLanguageState(next);
-    window.location.reload();
+    window.location.replace(`${window.location.pathname}${window.location.search}`);
   };
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage }}>
-      <div id="google_translate_element" className="google-translate-host" />
+      <div id="google_translate_element" className="google-translate-host notranslate" translate="no" />
       {children}
     </LanguageContext.Provider>
   );

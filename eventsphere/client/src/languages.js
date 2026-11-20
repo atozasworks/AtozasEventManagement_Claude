@@ -39,17 +39,32 @@ export function languageShort(code) {
   return String(code || 'en').slice(0, 2).toUpperCase();
 }
 
-/** Google Translate reads the googtrans cookie on load (`/en/hi`). */
+/** Host plus parent domains. Google writes googtrans on more than one of these. */
+export function translateCookieDomains(host = window.location.hostname) {
+  const domains = [''];
+  if (!host || host === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return domains;
+  domains.push(host, `.${host}`);
+  const parts = host.split('.');
+  for (let i = 1; i < parts.length - 1; i += 1) domains.push(`.${parts.slice(i).join('.')}`);
+  return [...new Set(domains)];
+}
+
+/** Google Translate reads the googtrans cookie on load (`/en/hi`). English means no cookie. */
 export function writeTranslateCookie(code) {
   const expire = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  const host = window.location.hostname;
-  const clear = (domain) => {
+  for (const domain of translateCookieDomains()) {
     document.cookie = `googtrans=;path=/;${expire}${domain ? `;domain=${domain}` : ''}`;
-  };
-  clear();
-  clear(host);
-  if (host.includes('.')) clear(`.${host}`);
-  if (code && code !== 'en') {
-    document.cookie = `googtrans=/en/${code};path=/`;
   }
+  if (code && code !== 'en') document.cookie = `googtrans=/en/${code};path=/`;
+}
+
+export function saveLanguage(code) {
+  const next = isLanguage(code) ? code : 'en';
+  try {
+    localStorage.setItem(KEY, next);
+  } catch {
+    /* the cookie still carries the choice for this reload */
+  }
+  writeTranslateCookie(next);
+  return next;
 }

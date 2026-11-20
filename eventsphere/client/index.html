@@ -15,7 +15,18 @@
           document.documentElement.dataset.theme = theme;
           var lang = localStorage.getItem('es_lang') || 'en';
           document.documentElement.lang = lang;
-          document.cookie = 'googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          if (/googtrans/i.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+          var host = location.hostname;
+          var domains = [''];
+          if (host && host !== 'localhost' && !/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+            domains.push(host, '.' + host);
+            var parts = host.split('.');
+            for (var i = 1; i < parts.length - 1; i++) domains.push('.' + parts.slice(i).join('.'));
+          }
+          var expire = 'expires=Thu, 01 Jan 1970 00:00:00 GMT';
+          for (var d = 0; d < domains.length; d++) {
+            document.cookie = 'googtrans=;path=/;' + expire + (domains[d] ? ';domain=' + domains[d] : '');
+          }
           if (lang && lang !== 'en') document.cookie = 'googtrans=/en/' + lang + ';path=/';
         } catch (e) {}
       })();
