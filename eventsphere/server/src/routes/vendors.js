@@ -132,11 +132,16 @@ function cleanListing(body, { creating }) {
     if (out.contact.email && !isEmail(out.contact.email)) throw new HttpError(400, 'The contact email is not valid');
     if (!out.contact.phone && !out.contact.whatsapp && !out.contact.email) throw new HttpError(400, 'Add at least one way to contact you: phone, WhatsApp or email');
   } else if (creating) throw new HttpError(400, 'Add at least one way to contact you: phone, WhatsApp or email');
+  if (creating || 'bookingFormats' in body) {
+    const formats = [...new Set((body.bookingFormats || []).filter((f) => f === 'quota' || f === 'direct'))];
+    if (!formats.length) throw new HttpError(400, 'Choose a quotation, direct booking, or both');
+    out.bookingFormats = formats;
+    out.instantBooking = formats.includes('direct');
+  } else if ('instantBooking' in body) out.instantBooking = Boolean(body.instantBooking);
   if ('bookingsPerDay' in body) {
     out.bookingsPerDay = Math.floor(Number(body.bookingsPerDay) || 1);
     if (out.bookingsPerDay < 1 || out.bookingsPerDay > 20) throw new HttpError(400, 'Bookings per day must be between 1 and 20');
   }
-  if ('instantBooking' in body) out.instantBooking = Boolean(body.instantBooking);
   if ('visitTypes' in body) out.visitTypes = [...new Set((body.visitTypes || []).filter((v) => VISIT_TYPES.includes(v)))];
   else if (creating) out.visitTypes = VENDOR_CATEGORIES[body.category].visitTypes;
   if ('active' in body) out.active = Boolean(body.active);
@@ -413,6 +418,9 @@ router.post(
     if (String(vendor.owner) === String(req.user._id)) throw new HttpError(400, 'This is your own listing');
     const { kind } = req.body;
     if (!['booking', 'quote', 'visit'].includes(kind)) throw new HttpError(400, 'Unknown request type');
+    const formats = vendor.bookingFormats?.length ? vendor.bookingFormats : ['quota', 'direct'];
+    if (kind === 'quote' && !formats.includes('quota')) throw new HttpError(400, `${vendor.name} does not take quotations. Book a free date directly.`);
+    if (kind === 'booking' && !formats.includes('direct')) throw new HttpError(400, `${vendor.name} works by quotation. Ask for a quote instead of booking a date.`);
     if ((await VendorRequest.countDocuments({ vendor: vendor._id, customer: req.user._id, status: { $in: ['requested', 'quoted', 'proposed'] } })) >= 5) {
       throw new HttpError(400, `You already have 5 open requests with ${vendor.name}. Wait for a reply or cancel one first.`);
     }

@@ -44,7 +44,9 @@ const vendorSchema = new mongoose.Schema(
     },
     // Availability
     bookingsPerDay: { type: Number, default: 1, min: 1, max: 20 }, // a hall takes 1 event a day; a caterer may take several
-    instantBooking: { type: Boolean, default: false }, // true = a free date is confirmed at once, without the vendor approving
+    // quota = customers ask for a quotation; direct = customers book a free date immediately. Both can be on.
+    bookingFormats: { type: [{ type: String, enum: ['quota', 'direct'] }], default: undefined },
+    instantBooking: { type: Boolean, default: false }, // true when direct booking is offered: a free date is confirmed at once
     blockedDates: [String], // YYYY-MM-DD dates the vendor has marked as unavailable
     visitTypes: [{ type: String, enum: VISIT_TYPES }], // what a customer can schedule: site visit, food tasting, meeting
     active: { type: Boolean, default: true }, // paused listings are hidden from search

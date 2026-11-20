@@ -4,7 +4,7 @@ import api, { errMsg } from '../api.js';
 import { money } from '../utils/format.js';
 import AvailabilityCalendar from '../components/AvailabilityCalendar.jsx';
 import { ContactButtons } from './Vendors.jsx';
-import { VENDOR_CATEGORIES, VISIT_LABEL, UNIT_LABEL, KIND_LABEL, REQUEST_STATUS, categoryOf, capacityText, priceText, niceDates, niceTime, ymd } from '../utils/vendors.js';
+import { VENDOR_CATEGORIES, VISIT_LABEL, UNIT_LABEL, KIND_LABEL, REQUEST_STATUS, categoryOf, capacityText, priceText, bookingLabel, niceDates, niceTime, ymd } from '../utils/vendors.js';
 
 const summary = (r) =>
   r.kind === 'visit'
@@ -84,8 +84,9 @@ function MyRequests() {
 }
 
 // ---------- Listing form ----------
-const blank = { category: 'marriage-hall', name: '', tagline: '', description: '', city: '', state: '', address: '', capacityMin: '', capacityMax: '', priceFrom: '', priceUnit: 'per-day', services: '', imageUrl: '', phone: '', whatsapp: '', email: '', bookingsPerDay: 1, instantBooking: false, visitTypes: ['site-visit'] };
-const toForm = (v) => ({ ...blank, ...v, services: (v.services || []).join(', '), phone: v.contact?.phone || '', whatsapp: v.contact?.whatsapp || '', email: v.contact?.email || '', capacityMin: v.capacityMin || '', capacityMax: v.capacityMax || '' });
+const blank = { category: 'marriage-hall', name: '', tagline: '', description: '', city: '', state: '', address: '', capacityMin: '', capacityMax: '', priceFrom: '', priceUnit: 'per-day', services: '', imageUrl: '', phone: '', whatsapp: '', email: '', bookingsPerDay: 1, instantBooking: false, bookingFormats: [], visitTypes: ['site-visit'] };
+const savedFormats = (v) => (v.bookingFormats?.length ? v.bookingFormats : ['quota', 'direct']);
+const toForm = (v) => ({ ...blank, ...v, bookingFormats: savedFormats(v), services: (v.services || []).join(', '), phone: v.contact?.phone || '', whatsapp: v.contact?.whatsapp || '', email: v.contact?.email || '', capacityMin: v.capacityMin || '', capacityMax: v.capacityMax || '' });
 
 function ListingForm({ initial, onSaved, onCancel }) {
   const [f, setF] = useState(initial ? toForm(initial) : blank);
@@ -94,12 +95,26 @@ function ListingForm({ initial, onSaved, onCancel }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
   const pickCategory = (id) => { const c = categoryOf(id); setF({ ...f, category: id, priceUnit: c.unit, visitTypes: c.visits }); };
   const toggleVisit = (t) => setF({ ...f, visitTypes: f.visitTypes.includes(t) ? f.visitTypes.filter((x) => x !== t) : [...f.visitTypes, t] });
+  const toggleFormat = (t) => setF({ ...f, bookingFormats: f.bookingFormats.includes(t) ? f.bookingFormats.filter((x) => x !== t) : [...f.bookingFormats, t] });
 
   async function save(e) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const body = { ...f, capacityMin: Number(f.capacityMin) || 0, capacityMax: Number(f.capacityMax) || 0, priceFrom: Number(f.priceFrom), contact: { phone: f.phone, whatsapp: f.whatsapp, email: f.email } };
+    if (!f.bookingFormats.length) {
+      setBusy(false);
+      setError('Choose a quota, direct booking, or both before you publish.');
+      return;
+    }
+    const body = {
+      ...f,
+      bookingFormats: f.bookingFormats,
+      instantBooking: f.bookingFormats.includes('direct'),
+      capacityMin: Number(f.capacityMin) || 0,
+      capacityMax: Number(f.capacityMax) || 0,
+      priceFrom: Number(f.priceFrom),
+      contact: { phone: f.phone, whatsapp: f.whatsapp, email: f.email },
+    };
     try {
       const { data } = initial ? await api.put(`/vendors/${initial._id}`, body) : await api.post('/vendors', body);
       onSaved(data);
@@ -131,7 +146,6 @@ function ListingForm({ initial, onSaved, onCancel }) {
         <label>Price is
           <select value={f.priceUnit} onChange={set('priceUnit')}>{Object.entries(UNIT_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         </label>
-        <label>Bookings you can take per day<input type="number" min={1} max={20} value={f.bookingsPerDay} onChange={set('bookingsPerDay')} /></label>
         <label>Smallest guest count (optional)<input type="number" min={0} value={f.capacityMin} onChange={set('capacityMin')} /></label>
         <label>Largest guest count (blank = no limit)<input type="number" min={0} value={f.capacityMax} onChange={set('capacityMax')} /></label>
         <label>Photo web address (optional)<input placeholder="https://…" value={f.imageUrl} onChange={set('imageUrl')} /></label>
@@ -150,7 +164,18 @@ function ListingForm({ initial, onSaved, onCancel }) {
           <label key={k} className="check"><input type="checkbox" checked={f.visitTypes.includes(k)} onChange={() => toggleVisit(k)} /> {l}</label>
         ))}
       </div>
-      <label className="check"><input type="checkbox" checked={f.instantBooking} onChange={set('instantBooking')} /> Instant booking: confirm a free date automatically, without waiting for me</label>
+      <div className="booking-choice">
+        <h4>How should customers book?</h4>
+        <p className="muted tiny">Choose at least one before you publish. You can offer both.</p>
+        <label className="check">
+          <input type="checkbox" checked={f.bookingFormats.includes('quota')} onChange={() => toggleFormat('quota')} />
+          <span><b>Quota</b> — customers only ask for a quotation. You reply with a price, and the date is booked only if they accept.</span>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={f.bookingFormats.includes('direct')} onChange={() => toggleFormat('direct')} />
+          <span><b>Direct booking</b> — customers pick a free date and it is confirmed immediately.</span>
+        </label>
+      </div>
       {error && <div className="alert error">{error}</div>}
       <div className="row gap">
         <button className="btn" disabled={busy}>{busy ? 'Saving…' : initial ? 'Save changes' : 'Publish listing'}</button>
@@ -267,7 +292,7 @@ function MyListings({ startNew }) {
                 <span className="pill subtle">{categoryOf(v.category).one}</span> {v.active ? <span className="pill ok">Live</span> : <span className="pill warn">Paused</span>}
                 {waiting.length > 0 && <span className="pill warn">{waiting.length} waiting for your answer</span>}
                 <h3><Link to={`/vendors/${v._id}`}>{v.name}</Link></h3>
-                <p className="small muted">{v.city} · {priceText(v)} · {capacityText(v)} · {v.bookingsPerDay} booking{v.bookingsPerDay === 1 ? '' : 's'} per day{v.instantBooking && ' · instant booking'}</p>
+                <p className="small muted">{v.city} · {priceText(v)} · {capacityText(v)} · {bookingLabel(v)}</p>
               </div>
               <div className="row gap wrap">
                 <button className="btn ghost sm" onClick={() => setCalendarFor(shown ? null : v._id)}>{shown ? 'Hide calendar' : 'Manage calendar'}</button>

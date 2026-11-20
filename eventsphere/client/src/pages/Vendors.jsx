@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { VENDOR_CATEGORIES, VISIT_LABEL, categoryOf, capacityText, priceText, whatsappLink, phoneLink, emailLink, niceDate, ymd } from '../utils/vendors.js';
+import { VENDOR_CATEGORIES, VISIT_LABEL, categoryOf, capacityText, priceText, formatsOf, whatsappLink, phoneLink, emailLink, niceDate, ymd } from '../utils/vendors.js';
 
 const MAX_COMPARE = 3;
 
@@ -38,23 +38,23 @@ export function ContactButtons({ vendor, small }) {
  *   compare  { checked, disabled, onToggle } adds the Compare tick box (Vendors page only)
  */
 export function VendorCard({ vendor: v, date, compare }) {
+  const modes = formatsOf(v);
+  const cta = modes.direct && modes.quota ? 'Quote or book' : modes.direct ? 'Book a date' : 'Request quote';
   return (
-    <div className="card vendor-card">
-      <Link to={`/vendors/${v._id}`}><VendorCover vendor={v} /></Link>
-      <div className="vendor-body">
+    <div className="card venue vendor-card">
+      <div className="row between">
         <span className="pill subtle">{categoryOf(v.category).one}</span>
-        <h3><Link to={`/vendors/${v._id}`}>{v.name}</Link></h3>
-        <p className="small muted">{v.city}{v.state && `, ${v.state}`} · {capacityText(v)}</p>
-        {v.tagline && <p className="small">{v.tagline}</p>}
-        <p className="price">{priceText(v)}</p>
-        <div className="tags">{v.services?.slice(0, 4).map((s) => <span key={s} className="tag">{s}</span>)}</div>
-        <div className="row between wrap vendor-actions">
-          {compare ? (
-            <label className="check small"><input type="checkbox" checked={compare.checked} disabled={compare.disabled} onChange={compare.onToggle} /> Compare</label>
-          ) : <span />}
-          <Link className="btn sm" to={`/vendors/${v._id}${date ? `?date=${date}` : ''}`}>Check dates &amp; book</Link>
-        </div>
+        {compare ? (
+          <label className="check small vendor-compare"><input type="checkbox" checked={compare.checked} disabled={compare.disabled} onChange={compare.onToggle} /> Compare</label>
+        ) : null}
       </div>
+      <h3><Link to={`/vendors/${v._id}`}>{v.name}</Link></h3>
+      <p className="small muted">{v.city}{v.state && `, ${v.state}`}</p>
+      <p className="small"><b>{capacityText(v)}</b> · <b>{priceText(v)}</b></p>
+      {!!v.services?.length && (
+        <div className="tags">{v.services.slice(0, 4).map((s) => <span key={s} className="tag">{s}</span>)}</div>
+      )}
+      <Link className="btn sm" to={`/vendors/${v._id}${date ? `?date=${date}` : ''}`}>{cta}</Link>
     </div>
   );
 }
@@ -175,7 +175,7 @@ export default function Vendors() {
                   <tr><th>Guests</th>{compare.map((v) => <td key={v._id}>{capacityText(v)}</td>)}</tr>
                   <tr><th>Includes</th>{compare.map((v) => <td key={v._id}>{v.services?.join(', ') || '—'}</td>)}</tr>
                   <tr><th>Before you book</th>{compare.map((v) => <td key={v._id}>{v.visitTypes?.map((t) => VISIT_LABEL[t]).join(', ') || '—'}</td>)}</tr>
-                  <tr><th>Booking</th>{compare.map((v) => <td key={v._id}>{v.instantBooking ? 'Confirmed instantly' : 'Vendor confirms your request'}</td>)}</tr>
+                  <tr><th>Booking</th>{compare.map((v) => <td key={v._id}>{formatsOf(v).direct && formatsOf(v).quota ? 'Quote or direct booking' : formatsOf(v).direct ? 'Direct booking, confirmed instantly' : 'Quotation only'}</td>)}</tr>
                   {f.date && <tr><th>{niceDate(f.date)}</th>{compare.map((v) => <td key={v._id} className="ok-text">Free</td>)}</tr>}
                   <tr><th>Contact</th>{compare.map((v) => <td key={v._id}><ContactButtons vendor={v} small /></td>)}</tr>
                   <tr><th />{compare.map((v) => <td key={v._id}><Link className="btn sm" to={`/vendors/${v._id}${f.date ? `?date=${f.date}` : ''}`}>Check dates &amp; book</Link></td>)}</tr>

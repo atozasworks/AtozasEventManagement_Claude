@@ -12,6 +12,18 @@ export const VENDOR_CATEGORIES = [
 ];
 export const categoryOf = (id) => VENDOR_CATEGORIES.find((c) => c.id === id) || VENDOR_CATEGORIES[0];
 
+// Older listings have no choice saved, so they keep both ways of booking.
+export function formatsOf(vendor) {
+  const list = Array.isArray(vendor?.bookingFormats) && vendor.bookingFormats.length ? vendor.bookingFormats : ['quota', 'direct'];
+  return { quota: list.includes('quota'), direct: list.includes('direct'), list };
+}
+export const bookingLabel = (vendor) => {
+  const { quota, direct } = formatsOf(vendor);
+  if (quota && direct) return 'Quote or direct booking';
+  if (direct) return 'Direct booking';
+  return 'Quotation only';
+};
+
 export const UNIT_LABEL = { 'per-day': 'per day', 'per-plate': 'per plate', 'per-event': 'per event', 'per-hour': 'per hour' };
 export const VISIT_LABEL = { 'site-visit': 'Site visit', tasting: 'Food tasting', meeting: 'Meeting' };
 

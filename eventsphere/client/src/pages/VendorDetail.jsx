@@ -4,7 +4,7 @@ import api, { errMsg } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import AvailabilityCalendar from '../components/AvailabilityCalendar.jsx';
 import { ContactButtons, VendorCover } from './Vendors.jsx';
-import { VISIT_LABEL, categoryOf, capacityText, priceText, niceDates, ymd } from '../utils/vendors.js';
+import { VISIT_LABEL, categoryOf, capacityText, priceText, formatsOf, niceDates, ymd } from '../utils/vendors.js';
 
 // Default time for a visit: tomorrow at 11:00, in the form <input type="datetime-local"> wants
 function tomorrowAt11() {
@@ -30,7 +30,12 @@ export default function VendorDetail() {
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
   useEffect(() => {
-    api.get(`/vendors/${id}`).then((r) => { setVendor(r.data); set({ visitType: r.data.visitTypes?.[0] || '' }); }).catch((e) => setError(errMsg(e)));
+    api.get(`/vendors/${id}`).then((r) => {
+      setVendor(r.data);
+      const modes = formatsOf(r.data);
+      setTab(modes.direct ? 'booking' : modes.quota ? 'quote' : 'visit');
+      set({ visitType: r.data.visitTypes?.[0] || '' });
+    }).catch((e) => setError(errMsg(e)));
   }, [id]);
   useEffect(() => { if (user?.phone) set({ phone: user.phone }); }, [user]);
 
@@ -38,6 +43,7 @@ export default function VendorDetail() {
   if (!vendor) return <div className="page"><div className="spinner" /></div>;
 
   const cat = categoryOf(vendor.category);
+  const modes = formatsOf(vendor);
   const mine = user && vendor.owner === user._id;
   const dates = range ? (range.start === range.end ? [range.start] : [range.start, range.end]) : [];
 
@@ -85,7 +91,7 @@ export default function VendorDetail() {
           <div className="stats vendor-stats">
             <div className="stat"><span>Price</span><b>{priceText(vendor)}</b></div>
             <div className="stat"><span>Guests</span><b>{capacityText(vendor)}</b></div>
-            <div className="stat"><span>Booking</span><b>{vendor.instantBooking ? 'Instant' : 'On request'}</b><small>{vendor.instantBooking ? 'A free date is confirmed at once' : 'The vendor confirms your date'}</small></div>
+            <div className="stat"><span>Booking</span><b>{modes.direct && modes.quota ? 'Quote or direct' : modes.direct ? 'Direct booking' : 'Quotation'}</b><small>{modes.direct && modes.quota ? 'Ask for a price, or book a free date now' : modes.direct ? 'A free date is confirmed at once' : 'Ask for a quotation. The date is booked only if you accept the price'}</small></div>
           </div>
           {vendor.description && (<><h3>About</h3><p className="prewrap">{vendor.description}</p></>)}
           {vendor.services?.length > 0 && (<><h3>What is included</h3><div className="tags">{vendor.services.map((s) => <span key={s} className="tag">{s}</span>)}</div></>)}
@@ -113,8 +119,8 @@ export default function VendorDetail() {
           ) : (
             <>
               <div className="segmented">
-                <button type="button" className={tab === 'booking' ? 'on' : ''} onClick={() => { setTab('booking'); setFormError(''); setCalOpen(true); }}>Book a date</button>
-                <button type="button" className={tab === 'quote' ? 'on' : ''} onClick={() => { setTab('quote'); setFormError(''); setCalOpen(false); }}>Get a quote</button>
+                {modes.direct && <button type="button" className={tab === 'booking' ? 'on' : ''} onClick={() => { setTab('booking'); setFormError(''); setCalOpen(true); }}>Book a date</button>}
+                {modes.quota && <button type="button" className={tab === 'quote' ? 'on' : ''} onClick={() => { setTab('quote'); setFormError(''); setCalOpen(false); }}>Get a quote</button>}
                 {vendor.visitTypes?.length > 0 && <button type="button" className={tab === 'visit' ? 'on' : ''} onClick={() => { setTab('visit'); setFormError(''); }}>Visit / tasting</button>}
               </div>
 
@@ -123,7 +129,7 @@ export default function VendorDetail() {
                   <div className="date-picker">
                     {/* The availability calendar opens right here, under the date line */}
                     <button type="button" className={`picked-date ${range ? 'on' : ''}`} aria-expanded={calOpen} onClick={() => setCalOpen((o) => !o)}>
-                      <span>{range ? <b>{niceDates(dates)}</b> : tab === 'booking' ? 'Pick your date on the calendar' : 'Pick a date on the calendar (optional)'}</span>
+                      <span key={range ? 'picked' : tab}>{range ? <b>{niceDates(dates)}</b> : tab === 'booking' ? 'Pick your date on the calendar' : 'Pick a date on the calendar (optional)'}</span>
                       <span aria-hidden="true">{calOpen ? '▴' : '▾'}</span>
                     </button>
                     {/* Hidden, not removed, when closed: it keeps the month you were looking at */}
@@ -145,19 +151,19 @@ export default function VendorDetail() {
                 )}
                 {tab !== 'visit' && <label>Number of guests<input type="number" min={0} max={vendor.capacityMax || undefined} placeholder={vendor.capacityMax ? `Up to ${vendor.capacityMax}` : ''} value={form.guests} onChange={(e) => set({ guests: e.target.value })} /></label>}
                 {tab === 'quote' && <label>Your budget in {vendor.currency} (optional)<input type="number" min={0} value={form.budget} onChange={(e) => set({ budget: e.target.value })} /></label>}
-                <label>{tab === 'quote' ? 'What do you need? (menu, hours, style, extras…)' : 'Message (optional)'}
+                <label key={tab === 'quote' ? 'need' : 'note'}>{tab === 'quote' ? 'What do you need? (menu, hours, style, extras…)' : 'Message (optional)'}
                   <textarea rows={3} maxLength={1000} required={tab === 'quote'} minLength={tab === 'quote' ? 10 : undefined} value={form.message} onChange={(e) => set({ message: e.target.value })} />
                 </label>
                 <label>Your phone / WhatsApp number<input placeholder="+91…" value={form.phone} onChange={(e) => set({ phone: e.target.value })} /></label>
                 {formError && <div className="alert error">{formError}</div>}
                 {user ? (
-                  <button className="btn block" disabled={busy || (tab === 'booking' && !range)}>
+                  <button key={busy ? 'sending' : tab} className="btn block" disabled={busy || (tab === 'booking' && !range)}>
                     {busy ? 'Sending…' : tab === 'booking' ? (vendor.instantBooking ? 'Book now' : 'Request this date') : tab === 'quote' ? 'Request a quote' : 'Request this time'}
                   </button>
                 ) : (
                   <Link className="btn block" to="/login" state={{ from: location.pathname + location.search }}>Log in to continue</Link>
                 )}
-                <p className="muted tiny">
+                <p key={tab} className="muted tiny">
                   {tab === 'booking' && (vendor.instantBooking ? 'The date is held for you as soon as you book.' : 'Nothing is charged here. The date is yours once the vendor confirms; you agree payment with them directly.')}
                   {tab === 'quote' && 'The vendor replies with a price. Accepting a quote for a date books that date.'}
                   {tab === 'visit' && 'The vendor confirms the time or suggests another one.'}
