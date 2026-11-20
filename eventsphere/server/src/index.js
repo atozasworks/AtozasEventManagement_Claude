@@ -60,7 +60,7 @@ app.use(express.json({ limit: '2mb' }));
 
 // Slow down password guessing
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 50, standardHeaders: 'draft-7', legacyHeaders: false, message: { message: 'Too many attempts. Please wait a few minutes and try again.' } });
-app.use(['/api/auth/login', '/api/auth/register', '/api/auth/reset-password', '/api/auth/verify-email'], authLimiter);
+app.use(['/api/auth/login', '/api/auth/register', '/api/auth/google', '/api/auth/reset-password', '/api/auth/verify-email'], authLimiter);
 // Stop the "send me a link" forms being used to flood someone's inbox
 const linkLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: 'draft-7', legacyHeaders: false, message: { message: 'Too many emails requested. Please wait a few minutes and try again.' } });
 app.use(['/api/auth/forgot-password', '/api/auth/resend-verification'], linkLimiter);

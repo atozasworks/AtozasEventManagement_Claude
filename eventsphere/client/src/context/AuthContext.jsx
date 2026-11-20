@@ -23,6 +23,8 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => saveSession((await api.post('/auth/login', { email, password })).data);
+  const loginWithGoogle = async (credential, extras = {}) =>
+    saveSession((await api.post('/auth/google', { credential, ...extras })).data);
   const register = async (data) => saveSession((await api.post('/auth/register', data)).data);
   const becomeOrganizer = async (organizationName) =>
     saveSession((await api.post('/auth/become-organizer', { organizationName })).data);
@@ -34,7 +36,7 @@ export function AuthProvider({ children }) {
   const isOrganizer = user && ['organizer', 'admin'].includes(user.role);
 
   return (
-    <AuthContext.Provider value={{ user, ready, login, register, logout, becomeOrganizer, isOrganizer, saveSession, setUser }}>
+    <AuthContext.Provider value={{ user, ready, login, loginWithGoogle, register, logout, becomeOrganizer, isOrganizer, saveSession, setUser }}>
       {children}
     </AuthContext.Provider>
   );

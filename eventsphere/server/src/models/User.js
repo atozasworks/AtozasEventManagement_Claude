@@ -5,7 +5,9 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, minlength: 6, select: false },
+    // Optional: accounts created with Continue with Google have no password until one is set.
+    password: { type: String, minlength: 6, select: false },
+    googleId: { type: String, unique: true, sparse: true },
     phone: { type: String, trim: true },
     role: { type: String, enum: ['attendee', 'organizer', 'admin'], default: 'attendee' },
     organizationName: { type: String, trim: true },
@@ -39,6 +41,7 @@ userSchema.pre('save', async function hashPassword(next) {
 });
 
 userSchema.methods.matchPassword = function matchPassword(plain) {
+  if (!this.password) return Promise.resolve(false);
   return bcrypt.compare(plain, this.password);
 };
 

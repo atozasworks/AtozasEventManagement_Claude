@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { errMsg } from '../api.js';
 import { photo } from '../utils/format.js';
+import GoogleContinue from '../components/GoogleContinue.jsx';
 
 export default function Register() {
   const { register } = useAuth();
@@ -13,13 +14,16 @@ export default function Register() {
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
+  function go(u) {
+    navigate(location.state?.from || (u.role === 'organizer' ? '/organize' : '/'));
+  }
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
-      const u = await register(form);
-      navigate(location.state?.from || (u.role === 'organizer' ? '/organize' : '/')); // back to where they were heading, e.g. a ticket link
+      go(await register(form));
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -38,16 +42,22 @@ export default function Register() {
           <button type="button" className={form.role === 'attendee' ? 'on' : ''} onClick={() => setForm({ ...form, role: 'attendee' })}>I want to attend</button>
           <button type="button" className={form.role === 'organizer' ? 'on' : ''} onClick={() => setForm({ ...form, role: 'organizer' })}>I want to host</button>
         </div>
+        {form.role === 'organizer' && (
+          <label>Organisation / brand name<input value={form.organizationName} onChange={set('organizationName')} /></label>
+        )}
+        <label className="check"><input type="checkbox" checked={form.marketingConsent} onChange={set('marketingConsent')} /> Send me event recommendations</label>
+        <GoogleContinue
+          extras={{ role: form.role, organizationName: form.organizationName, marketingConsent: form.marketingConsent }}
+          onSuccess={go}
+          onError={setError}
+        />
+        <div className="auth-or"><span>or</span></div>
+        {error && <div className="alert error">{error}</div>}
         <form onSubmit={submit}>
           <label>Full name<input required value={form.name} onChange={set('name')} /></label>
           <label>Email<input type="email" required value={form.email} onChange={set('email')} /></label>
           <label>WhatsApp number (optional)<input placeholder="+91…" value={form.phone} onChange={set('phone')} /></label>
-          {form.role === 'organizer' && (
-            <label>Organisation / brand name<input value={form.organizationName} onChange={set('organizationName')} /></label>
-          )}
           <label>Password<input type="password" minLength={6} required value={form.password} onChange={set('password')} /></label>
-          <label className="check"><input type="checkbox" checked={form.marketingConsent} onChange={set('marketingConsent')} /> Send me event recommendations</label>
-          {error && <div className="alert error">{error}</div>}
           <button className="btn block" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
         </form>
         <p className="small">Already have an account? <Link to="/login" state={location.state}>Log in</Link></p>

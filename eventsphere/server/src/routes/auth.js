@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import User from '../models/User.js';
 import { protect, signToken } from '../middleware/auth.js';
 import { ah, HttpError } from '../utils/http.js';
@@ -42,8 +43,85 @@ router.post(
   ah(async (req, res) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email: String(email || '').toLowerCase() }).select('+password');
-    if (!user || !(await user.matchPassword(password || ''))) throw new HttpError(401, 'Invalid email or password');
+    if (!user || !(await user.matchPassword(password || ''))) {
+      if (user && !user.password) throw new HttpError(401, 'This account uses Continue with Google. Use that button to sign in.');
+      throw new HttpError(401, 'Invalid email or password');
+    }
     if (user.suspended) throw new HttpError(403, 'This account has been suspended. Please contact support.');
+    res.json({ token: signToken(user), user: user.toSafeJSON() });
+  })
+);
+
+// The web client reads this so the Google button can be rendered. The client id is public.
+router.get('/google/config', (_req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+  res.json({ enabled: Boolean(clientId), clientId });
+});
+
+let googleClient;
+let googleClientId;
+function googleVerifier() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) return null;
+  if (!googleClient || googleClientId !== clientId) {
+    googleClient = new OAuth2Client(clientId);
+    googleClientId = clientId;
+  }
+  return googleClient;
+}
+
+router.post(
+  '/google',
+  ah(async (req, res) => {
+    const credential = String(req.body.credential || '');
+    if (!credential) throw new HttpError(400, 'Missing Google sign-in credential');
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const client = googleVerifier();
+    if (!clientId || !client) throw new HttpError(503, 'Google sign-in is not configured yet');
+
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({ idToken: credential, audience: clientId });
+      payload = ticket.getPayload();
+    } catch {
+      throw new HttpError(401, 'Google sign-in could not be verified. Please try again.');
+    }
+
+    const email = String(payload?.email || '').toLowerCase().trim();
+    const googleId = String(payload?.sub || '');
+    if (!email || !googleId || payload.email_verified !== true) {
+      throw new HttpError(401, 'Google did not confirm this email address');
+    }
+
+    let user = (await User.findOne({ googleId })) || (await User.findOne({ email }));
+    if (user?.suspended) throw new HttpError(403, 'This account has been suspended. Please contact support.');
+
+    const wantsOrganizer = req.body.role === 'organizer';
+    const organizationName = String(req.body.organizationName || '').trim().slice(0, 120);
+
+    if (!user) {
+      const name = String(payload.name || email.split('@')[0]).trim().slice(0, 80) || 'Guest';
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        role: wantsOrganizer ? 'organizer' : 'attendee',
+        organizationName: wantsOrganizer ? organizationName : undefined,
+        marketingConsent: Boolean(req.body.marketingConsent),
+        emailVerified: true,
+      });
+    } else {
+      if (user.googleId && user.googleId !== googleId) {
+        throw new HttpError(409, 'This email is already linked to a different Google account');
+      }
+      if (!user.googleId) user.googleId = googleId;
+      user.emailVerified = true;
+      if (wantsOrganizer && user.role === 'attendee') user.role = 'organizer';
+      if (wantsOrganizer && organizationName && !user.organizationName) user.organizationName = organizationName;
+      if (req.body.marketingConsent) user.marketingConsent = true;
+      await user.save();
+    }
+
     res.json({ token: signToken(user), user: user.toSafeJSON() });
   })
 );
