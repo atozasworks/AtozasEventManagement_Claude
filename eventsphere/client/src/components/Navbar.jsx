@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import api from '../api.js';
 import NotificationBell from './NotificationBell.jsx';
@@ -7,6 +7,22 @@ import { useAuth } from '../context/AuthContext.jsx';
 export default function Navbar() {
   const { user, logout, isOrganizer } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onClick = (e) => { if (!menuRef.current?.contains(e.target)) setMenuOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => { setMenuOpen(false); }, [user?._id]);
   // Show "Check-in" only to people an organizer has added to a check-in team
   const [onGateDuty, setOnGateDuty] = useState(false);
   useEffect(() => {
@@ -33,11 +49,36 @@ export default function Navbar() {
           {user ? (
             <>
               <NotificationBell key={user._id} />
-              <span className="nav-user">
-                <span className="avatar sm">{user.name[0]}</span>
-                {user.name.split(' ')[0]}
-              </span>
-              <button className="btn ghost sm" onClick={() => { logout(); navigate('/'); }}>Log out</button>
+              <div className="profile-menu" ref={menuRef}>
+                <button
+                  type="button"
+                  className="profile-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  <span className="avatar sm">{user.name[0]}</span>
+                  {user.name.split(' ')[0]}
+                  <span className="profile-caret" aria-hidden="true">▾</span>
+                </button>
+                {menuOpen && (
+                  <div className="profile-panel" role="menu">
+                    <div className="profile-head">
+                      <b>{user.name}</b>
+                      <span className="small muted">{user.email}</span>
+                    </div>
+                    <Link role="menuitem" to="/settings" onClick={() => setMenuOpen(false)}>Settings</Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="profile-logout"
+                      onClick={() => { setMenuOpen(false); logout(); navigate('/'); }}
+                    >
+                      Log out
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <>

@@ -25,6 +25,7 @@ import Admin from './pages/Admin.jsx';
 import Vendors from './pages/Vendors.jsx';
 import VendorDetail from './pages/VendorDetail.jsx';
 import VendorHub from './pages/VendorHub.jsx';
+import Settings from './pages/Settings.jsx';
 
 function RequireAuth({ children, organizer }) {
   const { user, ready, isOrganizer } = useAuth();
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/venues" element={<Venues />} />
           <Route path="/tickets" element={<RequireAuth><MyTickets /></RequireAuth>} />
+          <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
           <Route path="/live/:id" element={<RequireAuth><VirtualVenue /></RequireAuth>} />
           <Route path="/vendors" element={<Vendors />} />
           <Route path="/vendors/hub" element={<RequireAuth><VendorHub /></RequireAuth>} />
