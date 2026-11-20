@@ -57,7 +57,8 @@ export default function Home() {
       <section className="hero">
         <div className="hero-inner">
           <div className="hero-copy">
-            <h1>Every kind of event, one ticket away.</h1>
+            <p className="hero-kicker">India · Online · Hybrid</p>
+            <h1>Every kind of event, <em>one ticket</em> away.</h1>
             <p className="lead">
               Find conferences, festivals, webinars and workshops across India and online.
               Book in seconds with UPI and walk in with a QR on your phone.
@@ -76,11 +77,16 @@ export default function Home() {
               <button className="btn accent">Search</button>
             </form>
             <p className="popular">
-              Popular:
+              <span>Popular</span>
               {POPULAR.map((p) => (
                 <button key={p} type="button" onClick={() => setFilters((f) => ({ ...f, q: p }))}>{p}</button>
               ))}
             </p>
+            <ul className="hero-points">
+              <li><b>UPI</b><span>Checkout in seconds</span></li>
+              <li><b>QR entry</b><span>Your phone is the ticket</span></li>
+              <li><b>Free events</b><span>No platform fee</span></li>
+            </ul>
           </div>
 
           <div className="hero-tickets" aria-hidden="true">
