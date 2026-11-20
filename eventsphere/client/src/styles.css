@@ -181,6 +181,14 @@ body { top: 0 !important; }
 .icon-btn:hover { background: #fde8e8; color: var(--warn); }
 
 label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--ink-2); margin-bottom: 0.75rem; }
+.image-upload { margin-bottom: 0.75rem; }
+.image-upload > span { display: block; font-size: 0.85rem; font-weight: 600; color: var(--ink-2); margin-bottom: 0.4rem; }
+.image-upload-preview { height: 148px; border-radius: 12px; margin-bottom: 0.55rem; border: 1px solid var(--line); background: #eceaf4 center / cover no-repeat; }
+.image-upload label.btn { display: inline-flex; width: auto; margin: 0; cursor: pointer; }
+.image-upload input[type='file'] { display: none; }
+.image-upload .link-btn { margin: 0; }
+.image-upload .tiny { margin: 0.35rem 0 0; }
+[data-theme="dark"] .image-upload-preview { background-color: #1c2040; }
 label.check { display: flex; gap: 0.5rem; align-items: center; font-weight: 500; }
 input, select, textarea {
   display: block; width: 100%; margin-top: 0.3rem; font: inherit; font-weight: 400; color: var(--ink);
@@ -599,18 +607,35 @@ td input, td select { margin: 0; }
   .lang-option span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .page { padding: 1.15rem 0.9rem 2.4rem; }
-  .home-cats { padding-top: 0; padding-bottom: 1.4rem; }
-  .hero-inner { padding: 1.65rem 0.95rem 0.3rem; }
-  .hero h1 { max-width: 12ch; font-size: clamp(1.95rem, 8.4vw, 2.4rem); margin-bottom: 0.6rem; }
-  .hero .lead { font-size: 0.95rem; }
-  .hero-visual { height: 220px; margin: 0.35rem 0.9rem 1.1rem; border-radius: 18px; }
-  .hero-photo { border-radius: 20px; }
-  .search-bar { flex-direction: column; align-items: stretch; max-width: none; margin-top: 1.1rem; border-radius: 18px; padding: 0.55rem; }
-  .search-query { width: 100%; padding: 0.15rem 0.35rem; }
-  .search-city { border-left: none; border-top: 1px solid #e6e8f2; padding: 0.4rem 0.2rem 0.1rem; width: 100%; }
-  .search-bar select { flex: 1; width: auto; max-width: none; }
-  .search-bar .hero-search { width: 100%; max-width: none; }
-  .hero-points { display: grid; gap: 0.55rem; }
+  .home-cats { padding-top: 0.35rem; padding-bottom: 1.4rem; }
+  .home-showcase { overflow-x: clip; }
+  .hero { display: flex; flex-direction: column; overflow: hidden; max-width: 100%; }
+  .hero-visual { order: -1; height: 196px; width: auto; max-width: 100%; margin: 0 0 -1.35rem; border-radius: 0 0 22px 22px; }
+  .hero-photo { border-radius: 0 0 22px 22px; background-position: center 40%; }
+  .hero-inner { order: 1; position: relative; z-index: 1; padding: 0 1rem 0.85rem; min-width: 0; max-width: 100%; }
+  .hero-copy { max-width: none; min-width: 0; }
+  .hero h1 {
+    max-width: 100%; margin: 0 0 0.55rem; padding: 0.85rem 0.9rem 0.35rem;
+    font-size: clamp(1.35rem, 5.4vw, 1.65rem); line-height: 1.3; color: #161433;
+    background: #fff; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 24px rgba(16, 19, 46, 0.08);
+    overflow-wrap: break-word;
+  }
+  .hero-mark { display: inline; color: #f27316; }
+  [data-theme="dark"] .hero h1 { color: #f5f6ff; background: #12152e; }
+  .hero .lead { max-width: none; font-size: 0.92rem; line-height: 1.45; }
+  .search-bar {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-width: 0; max-width: 100%;
+    grid-template-areas: "query query" "city search";
+    gap: 0.4rem 0.45rem; margin-top: 0.85rem; border-radius: 16px; padding: 0.5rem; box-sizing: border-box;
+  }
+  .search-query { grid-area: query; width: auto; min-width: 0; padding: 0.1rem 0.25rem 0.35rem; border-bottom: 1px solid #e6e8f2; }
+  .search-city { grid-area: city; display: flex; border: none; padding: 0 0.15rem; width: auto; min-width: 0; overflow: hidden; }
+  .search-bar select { width: 0; min-width: 0; max-width: 100%; flex: 1 1 auto; }
+  .search-bar .hero-search { grid-area: search; width: auto; max-width: none; padding: 0.68rem 0.9rem; border-radius: 12px; white-space: nowrap; }
+  .hero-points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem; margin-top: 0.8rem; }
+  .hero-points li { flex-direction: column; align-items: flex-start; gap: 0.2rem; font-size: 0.72rem; line-height: 1.25; }
+  .hero-points svg { width: 18px; height: 18px; }
+  [data-theme="dark"] .search-query { border-bottom-color: #323864; }
 
   .section-head { align-items: flex-start; margin: 1.5rem 0 0.8rem; }
   .home-cats .section-head { margin-top: 0; align-items: center; }

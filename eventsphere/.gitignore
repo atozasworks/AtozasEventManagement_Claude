@@ -6,3 +6,6 @@ dist/
 
 # Emails saved locally when SMTP is not configured
 .outbox/
+
+# Photos uploaded from vendor and event forms
+server/uploads/

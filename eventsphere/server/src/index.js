@@ -27,6 +27,7 @@ import couponRoutes from './routes/coupons.js';
 import adminRoutes from './routes/admin.js';
 import notificationRoutes from './routes/notifications.js';
 import vendorRoutes from './routes/vendors.js';
+import uploadRoutes, { uploadDir } from './routes/uploads.js';
 import { emailConfigured } from './services/email.js';
 import { startReminderScheduler } from './services/reminders.js';
 
@@ -77,6 +78,12 @@ app.use('/api/coupons', couponRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/uploads', (_req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+app.use('/api/uploads', express.static(uploadDir, { maxAge: '7d', index: false }));
+app.use('/api/uploads', uploadRoutes);
 
 // In production, serve the built React app from the live dist folder
 // const clientDist = path.resolve(__dirname, '../../client/dist');

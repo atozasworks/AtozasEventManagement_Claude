@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api, { errMsg } from '../api.js';
 import { CATEGORIES, FORMATS, toLocalInput } from '../utils/format.js';
+import ImageUpload from '../components/ImageUpload.jsx';
 
 const MODULES = [
   ['ticketing', 'Ticketing & payments', 'UPI, cards, wallets, tiered tickets'],
@@ -206,7 +207,7 @@ export default function EventEditor() {
           </label>
         </div>
         <label>Tags (comma separated)<input value={ev.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((t) => t.trim()).filter(Boolean))} /></label>
-        <label>Cover image URL (optional)<input value={ev.coverImage || ''} onChange={(e) => set('coverImage', e.target.value)} /></label>
+        <ImageUpload label="Cover photo (optional)" value={ev.coverImage || ''} onChange={(url) => set('coverImage', url)} />
       </section>
 
       {needsVenue && (

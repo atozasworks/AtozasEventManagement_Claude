@@ -5,6 +5,7 @@ import { money } from '../utils/format.js';
 import AvailabilityCalendar from '../components/AvailabilityCalendar.jsx';
 import { ContactButtons } from './Vendors.jsx';
 import { VENDOR_CATEGORIES, VISIT_LABEL, UNIT_LABEL, KIND_LABEL, REQUEST_STATUS, categoryOf, capacityText, priceText, bookingLabel, niceDates, niceTime, ymd } from '../utils/vendors.js';
+import ImageUpload from '../components/ImageUpload.jsx';
 
 const summary = (r) =>
   r.kind === 'visit'
@@ -148,8 +149,8 @@ function ListingForm({ initial, onSaved, onCancel }) {
         </label>
         <label>Smallest guest count (optional)<input type="number" min={0} value={f.capacityMin} onChange={set('capacityMin')} /></label>
         <label>Largest guest count (blank = no limit)<input type="number" min={0} value={f.capacityMax} onChange={set('capacityMax')} /></label>
-        <label>Photo web address (optional)<input placeholder="https://…" value={f.imageUrl} onChange={set('imageUrl')} /></label>
       </div>
+      <ImageUpload label="Photo (optional)" value={f.imageUrl} onChange={(url) => setF((prev) => ({ ...prev, imageUrl: url }))} />
       <label>What is included (comma separated)<input placeholder="AC hall, Parking, Bridal room, Generator backup" value={f.services} onChange={set('services')} /></label>
       <h4>How customers reach you</h4>
       <div className="grid-3">
